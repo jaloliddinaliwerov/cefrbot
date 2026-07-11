@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties # <-- Shu qator qo'shildi
 from config import BOT_TOKEN
 
 # Routerlarni chaqirib olamiz
@@ -11,17 +12,20 @@ from user_handlers import user_router
 logging.basicConfig(level=logging.INFO)
 
 async def main():
-    # Bot va Dispatcher obyektlari
-    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+    # Bot va Dispatcher obyektlari (Shu yer o'zgardi)
+    bot = Bot(
+        token=BOT_TOKEN, 
+        default=DefaultBotProperties(parse_mode='HTML') # <-- parse_mode yangicha usulda yozildi
+    )
     dp = Dispatcher()
 
-    # Routerlarni ulash (ketma-ketligiga e'tibor bering, admin birinchi turishi yaxshi)
+    # Routerlarni ulash
     dp.include_router(admin_router)
     dp.include_router(user_router)
 
     print("Bot muvaffaqiyatli ishga tushdi...")
     
-    # Botni polling rejimida ishga tushiramiz (eski xabarlarni o'tkazib yuborish bilan)
+    # Botni polling rejimida ishga tushiramiz
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
