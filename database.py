@@ -22,16 +22,7 @@ else:
 # Create engine and session maker
 connect_args = {}
 if db_url.startswith("postgresql"):
-    import urllib.parse
-    try:
-        parsed = urllib.parse.urlparse(db_url)
-        host = parsed.hostname
-        if host in ("postgres", "localhost", "127.0.0.1") or (host and "railway.internal" in host):
-            connect_args = {"ssl": False}
-        else:
-            connect_args = {"ssl": True}
-    except Exception:
-        pass
+    connect_args = {"ssl": False}
 
 engine = create_async_engine(
     db_url,
