@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="uz" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CEFR Prep Hub - Dashboard & Admin Panel</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            950: '#030712'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom Styling for CEFR Prep Hub Dashboard */
+        body {
+            background-color: #030712;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        /* Glassmorphism card utility */
+        .glass-card {
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            border-radius: 1rem;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        .glass-card:hover {
+            border-color: rgba(14, 165, 233, 0.2);
+        }
+
+        /* Navigation Buttons */
+        .nav-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+            border-radius: 0.75rem;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            color: #f1f5f9;
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+
+        .active-nav {
+            color: #0ea5e9;
+            background-color: rgba(14, 165, 233, 0.08);
+            border: 1px solid rgba(14, 165, 233, 0.15);
+        }
+
+        .active-nav:hover {
+            color: #0ea5e9;
+            background-color: rgba(14, 165, 233, 0.12);
+        }
+
+        /* Mobile Nav Buttons */
+        .mobile-nav-btn {
+            display: flex;
+            width: 100%;
+            align-items: center;
+            padding: 0.625rem 0.875rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #94a3b8;
+            border-radius: 0.5rem;
+            text-align: left;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .mobile-nav-btn:hover {
+            color: #f1f5f9;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Input Fields */
+        .input-field {
+            width: 100%;
+            background-color: rgba(3, 7, 18, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            padding: 0.625rem 0.875rem;
+            color: #f8fafc;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            outline: none;
+        }
+
+        .input-field:focus {
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: linear-gradient(135deg, #0ea5e9 0%, #4f46e5 100%);
+            color: #ffffff;
+            font-weight: 500;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(14, 165, 233, 0.25);
+            filter: brightness(1.05);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background-color: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #cbd5e1;
+            font-weight: 500;
+            border-radius: 0.75rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.06);
+            color: #f8fafc;
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Stats Cards */
+        .stat-card {
+            background: rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1.25rem;
+            border-radius: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 7.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .stat-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #94a3b8;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-val {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-top: 0.5rem;
+        }
+
+        .stat-sub {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+
+        /* Admin subnav */
+        .admin-sub-btn {
+            padding: 0.625rem 1.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #64748b;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .admin-sub-btn:hover {
+            color: #e2e8f0;
+        }
+
+        .active-admin-sub {
+            color: #0ea5e9;
+            border-color: #0ea5e9;
+        }
+
+        /* Achievement item design */
+        .badge-unlocked {
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid rgba(16, 185, 129, 0.15);
+        }
+        .badge-locked {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            opacity: 0.5;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.16);
+        }
+    </style>
+</head>
+<body class="h-full font-['Outfit'] antialiased">
+    <div class="min-h-full flex flex-col">
+        <!-- Navigation Header -->
+        <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md">
+            <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                <div class="flex h-16 items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 shadow-lg shadow-brand-500/20">
+                            <i class="fa-solid fa-graduation-cap text-lg text-white"></i>
+                        </div>
+                        <div>
+                            <span class="text-xl font-bold bg-gradient-to-r from-brand-500 to-indigo-400 bg-clip-text text-transparent">CEFR Prep Hub</span>
+                            <span class="hidden sm:inline-block ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400">Student & Admin Portal</span>
+                        </div>
+                    </div>
+                    
+                    <nav class="hidden md:flex items-center gap-1">
+                        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn active-nav">
+                            <i class="fa-solid fa-chart-line mr-2"></i>Dashboard
+                        </button>
+                        <button onclick="switchTab('leaderboard')" id="nav-leaderboard" class="nav-btn">
+                            <i class="fa-solid fa-trophy mr-2"></i>Leaderboard
+                        </button>
+                        <button onclick="switchTab('mock')" id="nav-mock" class="nav-btn">
+                            <i class="fa-solid fa-file-invoice mr-2"></i>Mock Exams
+                        </button>
+                        <button onclick="switchTab('admin')" id="nav-admin" class="nav-btn">
+                            <i class="fa-solid fa-lock mr-2"></i>Admin Panel
+                        </button>
+                    </nav>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="openSettings()" class="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white transition">
+                            <i class="fa-solid fa-gear text-lg"></i>
+                        </button>
+                        <button class="md:hidden rounded-lg p-2 text-slate-400 hover:bg-slate-800" onclick="toggleMobileMenu()">
+                            <i class="fa-solid fa-bars text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Mobile Menu -->
+            <div id="mobile-menu" class="hidden md:hidden border-b border-slate-800 bg-slate-900 px-4 py-3 flex flex-col gap-2">
+                <button onclick="switchTab('dashboard'); toggleMobileMenu()" class="mobile-nav-btn"><i class="fa-solid fa-chart-line mr-3"></i>Dashboard</button>
+                <button onclick="switchTab('leaderboard'); toggleMobileMenu()" class="mobile-nav-btn"><i class="fa-solid fa-trophy mr-3"></i>Leaderboard</button>
+                <button onclick="switchTab('mock'); toggleMobileMenu()" class="mobile-nav-btn"><i class="fa-solid fa-file-invoice mr-3"></i>Mock Exams</button>
+                <button onclick="switchTab('admin'); toggleMobileMenu()" class="mobile-nav-btn"><i class="fa-solid fa-lock mr-3"></i>Admin Panel</button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            
+            <!-- ====== DASHBOARD TAB ====== -->
+            <section id="tab-dashboard" class="tab-content space-y-8">
+                <div class="glass-card p-6 flex flex-col lg:flex-row items-center justify-between gap-6">
+                    <div class="flex items-center gap-4 text-center lg:text-left flex-col sm:flex-row">
+                        <div class="h-16 w-16 rounded-full bg-gradient-to-tr from-brand-500 to-indigo-500 flex items-center justify-center text-3xl font-bold shadow-lg" id="user-avatar">
+                            U
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-bold" id="user-name">Salom, Talaba!</h2>
+                            <p class="text-slate-400 text-sm">Botda yutuqlar qozonib darajangizni oshiring.</p>
+                            <div class="mt-2 flex gap-2 justify-center sm:justify-start">
+                                <span class="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
+                                    <i class="fa-solid fa-fire text-orange-400"></i> <span id="user-streak-badge">0 kun streak</span>
+                                </span>
+                                <span class="bg-amber-500/20 text-amber-300 text-xs px-2.5 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
+                                    <i class="fa-solid fa-bolt text-amber-400"></i> <span id="user-xp-badge">0 XP</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full max-w-xs flex gap-2">
+                        <input type="number" id="stats-tg-id" placeholder="Telegram ID kiriting..." class="input-field text-sm py-2">
+                        <button onclick="loadStatsByInput()" class="btn-primary py-2 px-4 whitespace-nowrap text-sm"><i class="fa-solid fa-search mr-1.5"></i>Ko'rish</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Bajarilgan Testlar</span>
+                            <i class="fa-solid fa-check-double text-emerald-400"></i>
+                        </div>
+                        <div class="stat-val" id="stat-tests">0 ta</div>
+                        <div class="stat-sub">Reading & Listening</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">O'rtacha Ball</span>
+                            <i class="fa-solid fa-percentage text-brand-400"></i>
+                        </div>
+                        <div class="stat-val" id="stat-avg-test">0%</div>
+                        <div class="stat-sub">To'g'rilik ko'rsatkichi</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Writing Topshiriqlar</span>
+                            <i class="fa-solid fa-pen-nib text-indigo-400"></i>
+                        </div>
+                        <div class="stat-val" id="stat-writings">0 ta</div>
+                        <div class="stat-sub" id="stat-avg-writing">O'rtacha: 0/100</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Speaking Topshiriqlar</span>
+                            <i class="fa-solid fa-microphone text-rose-400"></i>
+                        </div>
+                        <div class="stat-val" id="stat-speakings">0 ta</div>
+                        <div class="stat-sub" id="stat-avg-speaking">O'rtacha: 0/100</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                    <div class="glass-card p-6 lg:col-span-2">
+                        <h3 class="text-lg font-semibold mb-4"><i class="fa-solid fa-chart-simple mr-2 text-brand-500"></i>Rivojlanish statistikasi</h3>
+                        <div class="h-64">
+                            <canvas id="progressChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card p-6">
+                        <h3 class="text-lg font-semibold mb-4"><i class="fa-solid fa-award mr-2 text-amber-500"></i>Yutuqlar (Achievements)</h3>
+                        <div class="space-y-4 max-h-[16rem] overflow-y-auto pr-2" id="achievements-list">
+                            <p class="text-slate-400 text-sm italic">Yuklanmoqda...</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====== LEADERBOARD TAB ====== -->
+            <section id="tab-leaderboard" class="tab-content hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold"><i class="fa-solid fa-trophy text-amber-500 mr-2"></i>Peshqadamlar Jadvali</h2>
+                        <p class="text-slate-400 text-sm">Eng ko'p XP to'plagan top 20 talaba ro'yxati</p>
+                    </div>
+                    <button onclick="loadLeaderboard()" class="btn-secondary py-2 px-3 text-xs"><i class="fa-solid fa-rotate mr-1"></i>Yangilash</button>
+                </div>
+                
+                <div class="glass-card overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse text-left text-sm">
+                            <thead class="bg-slate-900/50 border-b border-slate-800 text-slate-300">
+                                <tr>
+                                    <th class="p-4 font-semibold">O'rin</th>
+                                    <th class="p-4 font-semibold">Foydalanuvchi</th>
+                                    <th class="p-4 font-semibold text-center">Streak 🔥</th>
+                                    <th class="p-4 font-semibold text-right">Jami XP ⚡️</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-850" id="leaderboard-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====== MOCK EXAMS TAB ====== -->
+            <section id="tab-mock" class="tab-content hidden space-y-6">
+                <div>
+                    <h2 class="text-2xl font-bold"><i class="fa-solid fa-file-invoice text-indigo-500 mr-2"></i>Mock Imtihonlar do'koni</h2>
+                    <p class="text-slate-400 text-sm">Haqiqiy CEFR darajangizni aniqlash uchun imtihonlarni sotib oling va topshiring.</p>
+                </div>
+                <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3" id="mock-list-grid">
+                </div>
+            </section>
+
+            <!-- ====== ADMIN PANEL TAB ====== -->
+            <section id="tab-admin" class="tab-content hidden space-y-8">
+                <!-- Login Box -->
+                <div id="admin-login-box" class="max-w-md mx-auto glass-card p-6 space-y-4">
+                    <div class="text-center">
+                        <div class="h-12 w-12 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center mx-auto text-xl mb-3">
+                            <i class="fa-solid fa-user-shield"></i>
+                        </div>
+                        <h3 class="text-xl font-bold">Admin Tizimiga Kirish</h3>
+                        <p class="text-slate-400 text-xs mt-1">Telegramda `/admin` buyrug'i orqali token oling.</p>
+                    </div>
+                    
+                    <div class="space-y-2">
+                        <label class="text-xs font-semibold text-slate-400 uppercase">Admin Kirish Tokeni</label>
+                        <input type="password" id="admin-token-input" placeholder="Tokenni bu yerga kiriting..." class="input-field">
+                    </div>
+                    
+                    <button onclick="loginAdmin()" class="w-full btn-primary py-2.5">Tizimga Kirish</button>
+                </div>
+
+                <!-- Admin Dashboard (Hidden initially) -->
+                <div id="admin-dashboard" class="hidden space-y-8">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+                        <div>
+                            <h2 class="text-2xl font-bold text-red-400"><i class="fa-solid fa-lock-open mr-2"></i>Admin Dashboard</h2>
+                            <p class="text-slate-400 text-sm">Savollar, insholar va mock imtihonlarni boshqarish paneli</p>
+                        </div>
+                        <button onclick="logoutAdmin()" class="btn-secondary bg-red-950/30 border-red-900/50 hover:bg-red-900/30 text-red-300 py-2 px-4 text-sm">Chiqish</button>
+                    </div>
+
+                    <!-- Inner Tabs -->
+                    <div class="flex border-b border-slate-800 gap-2 overflow-x-auto pb-px">
+                        <button onclick="switchAdminSubTab('questions')" id="admin-sub-nav-questions" class="admin-sub-btn active-admin-sub">
+                            <i class="fa-solid fa-book-open mr-1.5"></i>Reading / Listening
+                        </button>
+                        <button onclick="switchAdminSubTab('writing')" id="admin-sub-nav-writing" class="admin-sub-btn">
+                            <i class="fa-solid fa-file-pen mr-1.5"></i>Writing / Speaking Tasks
+                        </button>
+                        <button onclick="switchAdminSubTab('mocks')" id="admin-sub-nav-mocks" class="admin-sub-btn">
+                            <i class="fa-solid fa-file-shield mr-1.5"></i>Mock Exams Builder
+                        </button>
+                    </div>
+
+                    <!-- 1. Reading / Listening Manager -->
+                    <div id="admin-sub-questions" class="admin-sub-content space-y-6">
+                        <!-- Add Form -->
+                        <div class="glass-card p-6 space-y-6">
+                            <h3 class="text-lg font-bold"><i class="fa-solid fa-plus-circle text-brand-400 mr-2"></i>Yangi Test Qo'shish</h3>
+                            
+                            <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Bo'lim</label>
+                                    <select id="q-section" onchange="toggleQuestionFields()" class="input-field">
+                                        <option value="reading">Reading</option>
+                                        <option value="listening">Listening</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Part (1-5)</label>
+                                    <input type="number" id="q-part" min="1" max="5" value="1" class="input-field">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Mavzu Sarlavhasi</label>
+                                    <input type="text" id="q-title" placeholder="Masalan: Computer History" class="input-field">
+                                </div>
+                            </div>
+
+                            <div id="reading-text-wrapper">
+                                <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Matn (Faqat Reading uchun)</label>
+                                <textarea id="q-text" rows="5" placeholder="Reading matnini bu yerga yozing..." class="input-field"></textarea>
+                            </div>
+
+                            <div id="listening-audio-wrapper" class="hidden">
+                                <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Audio URL (Faqat Listening uchun)</label>
+                                <input type="text" id="q-audio-url" placeholder="https://example.com/audio.mp3" class="input-field">
+                            </div>
+
+                            <!-- Dynamic Questions Builder -->
+                            <div class="space-y-4 border-t border-slate-800/80 pt-5">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-sm font-bold uppercase text-slate-400">Savollar ro'yxati</h4>
+                                    <button onclick="addQuestionRow()" class="btn-secondary py-1 px-3 text-xs"><i class="fa-solid fa-plus mr-1"></i>Savol qo'shish</button>
+                                </div>
+                                <div id="questions-builder-container" class="space-y-4">
+                                </div>
+                            </div>
+                            
+                            <div class="flex justify-end gap-3 border-t border-slate-800/80 pt-5">
+                                <button onclick="saveQuestion()" class="btn-primary py-2 px-6">Saqlash</button>
+                            </div>
+                        </div>
+
+                        <!-- Current Questions List -->
+                        <div class="glass-card p-6">
+                            <h3 class="text-lg font-bold mb-4">Mavjud Testlar Ro'yxati</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead>
+                                        <tr class="bg-slate-900 border-b border-slate-800 text-slate-350">
+                                            <th class="p-3">ID</th>
+                                            <th class="p-3">Bo'lim</th>
+                                            <th class="p-3">Part</th>
+                                            <th class="p-3">Sarlavha</th>
+                                            <th class="p-3 text-center">Savollar soni</th>
+                                            <th class="p-3 text-right">Amal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-questions-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Writing / Speaking Task Manager -->
+                    <div id="admin-sub-writing" class="admin-sub-content hidden space-y-6">
+                        <!-- Add Form -->
+                        <div class="glass-card p-6 space-y-5">
+                            <h3 class="text-lg font-bold"><i class="fa-solid fa-plus-circle text-indigo-400 mr-2"></i>Yangi Writing / Speaking Topshiriq</h3>
+                            
+                            <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Topshiriq Turi</label>
+                                    <select id="task-type" onchange="toggleTaskFields()" class="input-field">
+                                        <option value="writing">Writing Task</option>
+                                        <option value="speaking">Speaking Task</option>
+                                    </select>
+                                </div>
+                                <div id="speaking-part-wrapper" class="hidden">
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Part (1, 2 yoki 3)</label>
+                                    <input type="number" id="task-part" min="1" max="3" value="1" class="input-field">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Daraja (Level)</label>
+                                    <select id="task-level" class="input-field">
+                                        <option value="B1">B1</option>
+                                        <option value="B2">B2</option>
+                                        <option value="C1">C1</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Sarlavha</label>
+                                    <input type="text" id="task-title" placeholder="Mavzu sarlavhasi..." class="input-field">
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Mavzu Tavsifi (Prompt)</label>
+                                <textarea id="task-prompt" rows="4" placeholder="Topshiriq mavzusini to'liq yozing..." class="input-field"></textarea>
+                            </div>
+                            
+                            <div class="flex justify-end border-t border-slate-800 pt-4">
+                                <button onclick="saveTask()" class="btn-primary py-2 px-6">Topshiriqni Saqlash</button>
+                            </div>
+                        </div>
+
+                        <!-- Tasks List -->
+                        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                            <div class="glass-card p-6">
+                                <h3 class="text-md font-bold mb-3">Writing Topshiriqlari</h3>
+                                <div class="overflow-y-auto max-h-96 pr-2">
+                                    <ul id="admin-writings-ul" class="space-y-3"></ul>
+                                </div>
+                            </div>
+                            <div class="glass-card p-6">
+                                <h3 class="text-md font-bold mb-3">Speaking Topshiriqlari</h3>
+                                <div class="overflow-y-auto max-h-96 pr-2">
+                                    <ul id="admin-speakings-ul" class="space-y-3"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Mock Exam Manager -->
+                    <div id="admin-sub-mocks" class="admin-sub-content hidden space-y-6">
+                        <!-- Add Form -->
+                        <div class="glass-card p-6 space-y-5">
+                            <h3 class="text-lg font-bold"><i class="fa-solid fa-shield-halved text-brand-400 mr-2"></i>Yangi Mock Imtihonini Yig'ish</h3>
+                            
+                            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Mock Exam nomi</label>
+                                    <input type="text" id="mock-title" placeholder="Masalan: CEFR Mock #2" class="input-field">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">Narxi (UZS)</label>
+                                    <input type="number" id="mock-price" value="30000" class="input-field">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">1. Reading / Listening Savollarni tanlang</label>
+                                    <div class="border border-slate-800 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2" id="mock-questions-picker">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">2. Writing Topshiriqni tanlang</label>
+                                    <div class="border border-slate-800 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2" id="mock-writings-picker">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">3. Speaking Topshiriqni tanlang</label>
+                                    <div class="border border-slate-800 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2" id="mock-speakings-picker">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-end border-t border-slate-800 pt-4">
+                                <button onclick="saveMockExam()" class="btn-primary py-2 px-6">Mock Imtihonni Saqlash</button>
+                            </div>
+                        </div>
+
+                        <!-- Current Mock Exams -->
+                        <div class="glass-card p-6">
+                            <h3 class="text-lg font-bold mb-4">Mavjud Mock Examlar Ro'yxati</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm text-left">
+                                    <thead>
+                                        <tr class="bg-slate-900 border-b border-slate-800 text-slate-350">
+                                            <th class="p-3">ID</th>
+                                            <th class="p-3">Sarlavha</th>
+                                            <th class="p-3">Narxi</th>
+                                            <th class="p-3">Reading/Listening soni</th>
+                                            <th class="p-3">Writing soni</th>
+                                            <th class="p-3">Speaking soni</th>
+                                            <th class="p-3 text-right">Amal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-mocks-tbody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <!-- Footer -->
+        <footer class="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-500">
+            <p>© 2026 CEFR Prep Bot & Web App. Hamma huquqlar himoyalangan.</p>
+        </footer>
+    </div>
+
+    <!-- Global API Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden">
+        <div class="glass-card w-full max-w-sm p-6 space-y-4">
+            <h3 class="text-lg font-bold"><i class="fa-solid fa-gear mr-2 text-slate-400"></i>Tizim Sozlamalari</h3>
+            
+            <div class="space-y-2">
+                <label class="text-xs font-semibold text-slate-400 uppercase">Backend API Manzili (URL)</label>
+                <input type="text" id="api-url-input" placeholder="https://example.railway.app" class="input-field text-sm">
+                <p class="text-[10px] text-slate-400">Agarda Vercel alohida domenda bo'lsa, Railway URL manzilingizni yozib qo'ying.</p>
+            </div>
+            
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="closeSettings()" class="btn-secondary py-1.5 px-3 text-xs">Bekor qilish</button>
+                <button onclick="saveSettings()" class="btn-primary py-1.5 px-4 text-xs">Saqlash</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Embedded Javascript Logic -->
+    <script>
+        // Global Config
+        let API_URL = localStorage.getItem('api_url') || window.location.origin;
+        let adminToken = localStorage.getItem('admin_token') || '';
+        let chartInstance = null;
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            // Determine API URL fallback
+            if (!localStorage.getItem('api_url') && !window.location.origin.includes('localhost') && !window.location.origin.includes('127.0.0.1')) {
+                API_URL = window.location.origin;
+            }
+            
+            document.getElementById('api-url-input').value = API_URL;
+
+            // Parse URL params
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenParam = urlParams.get('token');
+            if (tokenParam) {
+                localStorage.setItem('admin_token', tokenParam);
+                adminToken = tokenParam;
+                window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+            }
+
+            // Parse Hash Routing
+            const hash = window.location.hash || '#dashboard';
+            switchTab(hash.replace('#', ''));
+
+            // Check Admin Login
+            checkAdminStatus();
+            
+            // Set up default dynamic question row
+            addQuestionRow();
+        });
+
+        // Settings Modal
+        function openSettings() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.add('hidden');
+        }
+        function saveSettings() {
+            const url = document.getElementById('api-url-input').value.trim().replace(/\/$/, "");
+            localStorage.setItem('api_url', url);
+            API_URL = url;
+            closeSettings();
+            alert("Sozlamalar saqlandi. API URL: " + API_URL);
+            const activeTab = document.querySelector('.active-nav').id.replace('nav-', '');
+            switchTab(activeTab);
+        }
+
+        // Mobile Menu
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Navigation Tabs
+        function switchTab(tabName) {
+            window.location.hash = tabName;
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            const activeTabEl = document.getElementById(`tab-${tabName}`);
+            if (activeTabEl) activeTabEl.classList.remove('hidden');
+
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active-nav'));
+            const activeBtn = document.getElementById(`nav-${tabName}`);
+            if (activeBtn) activeBtn.classList.add('active-nav');
+
+            if (tabName === 'dashboard') {
+                const lastSearchedId = localStorage.getItem('last_searched_tg_id') || 123456789;
+                document.getElementById('stats-tg-id').value = lastSearchedId;
+                loadDashboard(lastSearchedId);
+            } else if (tabName === 'leaderboard') {
+                loadLeaderboard();
+            } else if (tabName === 'mock') {
+                loadMockExams();
+            } else if (tabName === 'admin') {
+                checkAdminStatus();
+            }
+        }
+
+        // Dashboard Statistics Loading
+        async function loadStatsByInput() {
+            const tgId = document.getElementById('stats-tg-id').value.trim();
+            if (!tgId) {
+                alert("Iltimos, Telegram ID kiriting.");
+                return;
+            }
+            localStorage.setItem('last_searched_tg_id', tgId);
+            loadDashboard(tgId);
+        }
+
+        async function loadDashboard(tgId) {
+            try {
+                const response = await fetch(`${API_URL}/api/stats/${tgId}`);
+                if (!response.ok) throw new Error("Foydalanuvchi topilmadi or API error");
+                
+                const data = await response.json();
+                
+                document.getElementById('user-avatar').innerText = data.user.first_name ? data.user.first_name[0].toUpperCase() : 'U';
+                document.getElementById('user-name').innerText = data.user.first_name || 'Talaba';
+                document.getElementById('user-streak-badge').innerText = `${data.user.streak || 0} kun streak`;
+                document.getElementById('user-xp-badge').innerText = `${data.user.xp || 0} XP`;
+                
+                document.getElementById('stat-tests').innerText = `${data.stats.tests_completed} ta`;
+                document.getElementById('stat-avg-test').innerText = `${data.stats.average_test_score.toFixed(1)}%`;
+                
+                document.getElementById('stat-writings').innerText = `${data.stats.writings_completed} ta`;
+                document.getElementById('stat-avg-writing').innerText = `O'rtacha: ${data.stats.average_writing_score.toFixed(1)}/100`;
+                
+                document.getElementById('stat-speakings').innerText = `${data.stats.speakings_completed} ta`;
+                document.getElementById('stat-avg-speaking').innerText = `O'rtacha: ${data.stats.average_speaking_score.toFixed(1)}/100`;
+
+                renderChart(data.stats);
+                loadAchievements(data.achievements);
+
+            } catch (err) {
+                console.error(err);
+                alert(`Kiritilgan Telegram ID (${tgId}) bo'yicha profil topilmadi. Botni ishga tushirib /start bosing yoki boshqa ID kiriting.`);
+            }
+        }
+
+        function renderChart(stats) {
+            const ctx = document.getElementById('progressChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            const data = {
+                labels: ['Reading & Listening (%)', 'Writing Score (100)', 'Speaking Score (100)'],
+                datasets: [{
+                    label: 'Natijalar',
+                    data: [stats.average_test_score, stats.average_writing_score, stats.average_speaking_score],
+                    backgroundColor: [
+                        'rgba(14, 165, 233, 0.2)',
+                        'rgba(99, 102, 241, 0.2)',
+                        'rgba(244, 63, 94, 0.2)'
+                    ],
+                    borderColor: [
+                        '#0ea5e9',
+                        '#6366f1',
+                        '#f43f5e'
+                    ],
+                    borderWidth: 2
+                }]
+            };
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function loadAchievements(unlockedAchievements) {
+            const list = document.getElementById('achievements-list');
+            list.innerHTML = '';
+
+            const allAchievements = [
+                { id: "first_test", name: "Birinchi Qadam", description: "Birinchi testni topshirdingiz!", icon: "🏆" },
+                { id: "streak_3", name: "Faol O'quvchi", description: "3 kun ketma-ket kirish", icon: "🔥" },
+                { id: "streak_7", name: "Chempion", description: "7 kun ketma-ket kirish", icon: "👑" },
+                { id: "perfect_score", name: "A'lochi", description: "Testdan 100% ball", icon: "💯" },
+                { id: "mock_master", name: "Mock Eksperti", description: "Birinchi Mock imtihonini topshirdingiz", icon: "🎓" },
+                { id: "writing_pro", name: "Ijodkor", description: "Birinchi insho topshirildi", icon: "✍️" },
+                { id: "speaking_pro", name: "Notiq", description: "Birinchi gapirish topshirildi", icon: "🗣️" }
+            ];
+
+            allAchievements.forEach(ach => {
+                const isUnlocked = unlockedAchievements.some(ua => ua.id === ach.id);
+                const cardClass = isUnlocked ? 'badge-unlocked' : 'badge-locked';
+                list.innerHTML += `
+                    <div class="flex items-center gap-3 p-3 rounded-xl ${cardClass} transition">
+                        <div class="text-2xl">${ach.icon}</div>
+                        <div>
+                            <h4 class="text-sm font-semibold">${ach.name}</h4>
+                            <p class="text-xs text-slate-400">${ach.description}</p>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // Leaderboard Loading
+        async function loadLeaderboard() {
+            try {
+                const response = await fetch(`${API_URL}/api/leaderboard`);
+                const data = await response.json();
+                const tbody = document.getElementById('leaderboard-body');
+                tbody.innerHTML = '';
+
+                if (data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400 italic">Leaderboardda o'quvchilar yo'q.</td></tr>`;
+                    return;
+                }
+
+                const medal_emojis = {1: "🥇", 2: "🥈", 3: "🥉"};
+                data.forEach((user, idx) => {
+                    const medal = medal_emojis[idx + 1] || ` ${idx + 1} `;
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-900/30 transition">
+                            <td class="p-4 font-bold text-slate-350">${medal}</td>
+                            <td class="p-4 font-semibold">${user.first_name || 'Foydalanuvchi'}</td>
+                            <td class="p-4 text-center text-orange-400">${user.streak || 0} 🔥</td>
+                            <td class="p-4 text-right font-bold text-brand-400">${user.xp} XP</td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // Mock Exams Loading
+        async function loadMockExams() {
+            try {
+                const response = await fetch(`${API_URL}/api/mock-exams`);
+                const data = await response.json();
+                const grid = document.getElementById('mock-list-grid');
+                grid.innerHTML = '';
+
+                if (data.length === 0) {
+                    grid.innerHTML = `<div class="col-span-full text-center text-slate-400 italic py-8">Hozircha sotuvda Mock Imtihonlar yo'q.</div>`;
+                    return;
+                }
+
+                data.forEach(mock => {
+                    grid.innerHTML += `
+                        <div class="glass-card p-6 flex flex-col justify-between h-64">
+                            <div>
+                                <div class="flex items-center justify-between">
+                                    <span class="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-0.5 rounded-full border border-indigo-500/30">CEFR Mock</span>
+                                    <span class="text-brand-400 font-bold text-sm">${mock.price.toLocaleString()} UZS</span>
+                                </div>
+                                <h3 class="text-lg font-bold mt-4">${mock.title}</h3>
+                                <ul class="mt-3 space-y-1.5 text-xs text-slate-400">
+                                    <li><i class="fa-solid fa-circle-check text-emerald-500 mr-2"></i>Reading & Listening: ${mock.questions_count} ta savol</li>
+                                    <li><i class="fa-solid fa-circle-check text-indigo-500 mr-2"></i>Writing Tasks: ${mock.writing_count} ta insho</li>
+                                    <li><i class="fa-solid fa-circle-check text-rose-500 mr-2"></i>Speaking Tasks: ${mock.speaking_count} ta savol</li>
+                                </ul>
+                            </div>
+                            <button onclick="alert('Ushbu mock imtihonini boshlash uchun Telegram botga kiring!')" class="w-full btn-primary py-2 text-sm mt-4">Botda topshirish</button>
+                        </div>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // ====== ADMIN PORTAL FUNCTIONS ======
+        function checkAdminStatus() {
+            const loginBox = document.getElementById('admin-login-box');
+            const dashboard = document.getElementById('admin-dashboard');
+            
+            if (adminToken && verifyAdminStatelessToken(adminToken)) {
+                loginBox.classList.add('hidden');
+                dashboard.classList.remove('hidden');
+                loadAdminData();
+            } else {
+                loginBox.classList.remove('hidden');
+                dashboard.classList.add('hidden');
+            }
+        }
+
+        function verifyAdminStatelessToken(token) {
+            if (!token || !token.includes(':')) return false;
+            const parts = token.split(':');
+            return parts[0].length > 0 && parts[1].length === 16;
+        }
+
+        function loginAdmin() {
+            const token = document.getElementById('admin-token-input').value.trim();
+            if (!token) {
+                alert("Iltimos token kiriting.");
+                return;
+            }
+            localStorage.setItem('admin_token', token);
+            adminToken = token;
+            checkAdminStatus();
+        }
+
+        function logoutAdmin() {
+            localStorage.removeItem('admin_token');
+            adminToken = '';
+            checkAdminStatus();
+        }
+
+        function switchAdminSubTab(subName) {
+            document.querySelectorAll('.admin-sub-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`admin-sub-${subName}`).classList.remove('hidden');
+
+            document.querySelectorAll('.admin-sub-btn').forEach(el => el.classList.remove('active-admin-sub'));
+            document.getElementById(`admin-sub-nav-${subName}`).classList.add('active-admin-sub');
+        }
+
+        function loadAdminData() {
+            loadAdminQuestions();
+            loadAdminTasks();
+            loadAdminMocks();
+        }
+
+        async function loadAdminQuestions() {
+            try {
+                const response = await fetch(`${API_URL}/api/admin/questions`, {
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                if (!response.ok) throw new Error();
+                const data = await response.json();
+                
+                const tbody = document.getElementById('admin-questions-tbody');
+                tbody.innerHTML = '';
+
+                data.forEach(q => {
+                    tbody.innerHTML += `
+                        <tr class="border-b border-slate-800 hover:bg-slate-900/20">
+                            <td class="p-3 font-semibold text-slate-400">${q.id}</td>
+                            <td class="p-3 text-slate-200 capitalize font-medium">${q.section}</td>
+                            <td class="p-3 text-slate-200">Part ${q.part}</td>
+                            <td class="p-3 text-slate-200">${q.title}</td>
+                            <td class="p-3 text-center text-slate-300 font-bold">${q.questions_json.length} ta</td>
+                            <td class="p-3 text-right">
+                                <button onclick="deleteQuestion(${q.id})" class="text-red-400 hover:text-red-500 font-medium transition"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                populateQuestionsPickers(data);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteQuestion(id) {
+            if (!confirm("Ushbu testni o'chirmoqchimisiz?")) return;
+            try {
+                const res = await fetch(`${API_URL}/api/admin/questions/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                if (res.ok) {
+                    alert("O'chirildi!");
+                    loadAdminQuestions();
+                }
+            } catch (err) {
+                alert("Xatolik.");
+            }
+        }
+
+        function toggleQuestionFields() {
+            const sec = document.getElementById('q-section').value;
+            const readingText = document.getElementById('reading-text-wrapper');
+            const listeningAudio = document.getElementById('listening-audio-wrapper');
+            if (sec === 'reading') {
+                readingText.classList.remove('hidden');
+                listeningAudio.classList.add('hidden');
+            } else {
+                readingText.classList.add('hidden');
+                listeningAudio.classList.remove('hidden');
+            }
+        }
+
+        function addQuestionRow() {
+            const container = document.getElementById('questions-builder-container');
+            const idx = container.children.length + 1;
+            const row = document.createElement('div');
+            row.className = "p-4 border border-slate-800 rounded-xl space-y-3 bg-slate-900/30 question-row";
+            row.innerHTML = `
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <h5 class="text-xs font-bold text-slate-400">Savol #${idx}</h5>
+                    <button onclick="this.closest('.question-row').remove()" class="text-slate-400 hover:text-red-400 text-xs"><i class="fa-solid fa-times mr-1"></i>O'chirish</button>
+                </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-slate-400">Savol matni</label>
+                    <input type="text" placeholder="Savolni yozing..." class="input-field py-1.5 text-xs row-q-text">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="A variant" class="input-field py-1.5 text-xs row-opt-a">
+                    <input type="text" placeholder="B variant" class="input-field py-1.5 text-xs row-opt-b">
+                    <input type="text" placeholder="C variant" class="input-field py-1.5 text-xs row-opt-c">
+                    <input type="text" placeholder="D variant" class="input-field py-1.5 text-xs row-opt-d">
+                </div>
+                <div class="w-1/3">
+                    <label class="text-xs text-slate-400">To'g'ri javob</label>
+                    <select class="input-field py-1 text-xs row-answer">
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+            `;
+            container.appendChild(row);
+        }
+
+        async function saveQuestion() {
+            const section = document.getElementById('q-section').value;
+            const part = parseInt(document.getElementById('q-part').value);
+            const title = document.getElementById('q-title').value.trim();
+            const text = document.getElementById('q-text').value.trim();
+            const audioUrl = document.getElementById('q-audio-url').value.trim();
+            
+            if (!title) {
+                alert("Sarlavhani kiriting.");
+                return;
+            }
+            
+            const rows = document.querySelectorAll('.question-row');
+            const questionsList = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const qText = row.querySelector('.row-q-text').value.trim();
+                const optA = row.querySelector('.row-opt-a').value.trim();
+                const optB = row.querySelector('.row-opt-b').value.trim();
+                const optC = row.querySelector('.row-opt-c').value.trim();
+                const optD = row.querySelector('.row-opt-d').value.trim();
+                const answer = row.querySelector('.row-answer').value;
+                
+                if (!qText || !optA || !optB) {
+                    alert(`Savol #${i+1} ni to'liq to'ldiring.`);
+                    return;
+                }
+                questionsList.push({
+                    id: i + 1,
+                    q: qText,
+                    options: [`A: ${optA}`, `B: ${optB}`, `C: ${optC}`, `D: ${optD}`].filter(o => o.split(': ')[1]),
+                    answer: answer
+                });
+            }
+
+            if (questionsList.length === 0) {
+                alert("Kamida bitta savol qo'shing.");
+                return;
+            }
+
+            const payload = {
+                section,
+                part,
+                title,
+                text: section === 'reading' ? text : null,
+                audio_url: section === 'listening' ? audioUrl : null,
+                questions_json: questionsList,
+                is_mock: false
+            };
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/questions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert("Test saqlandi!");
+                    document.getElementById('q-title').value = '';
+                    document.getElementById('q-text').value = '';
+                    document.getElementById('q-audio-url').value = '';
+                    document.getElementById('questions-builder-container').innerHTML = '';
+                    addQuestionRow();
+                    loadAdminQuestions();
+                } else {
+                    const data = await response.json();
+                    alert("Xatolik: " + data.detail);
+                }
+            } catch (err) {
+                alert("API ulanish xatosi.");
+            }
+        }
+
+        async function loadAdminTasks() {
+            try {
+                const w_res = await fetch(`${API_URL}/api/admin/writing-tasks`, {
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                const writings = await w_res.json();
+                
+                const s_res = await fetch(`${API_URL}/api/admin/speaking-tasks`, {
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                const speakings = await s_res.json();
+
+                const w_ul = document.getElementById('admin-writings-ul');
+                w_ul.innerHTML = writings.length === 0 ? '<li class="text-slate-400 italic">Vazifalar yo'q.</li>' : '';
+                writings.forEach(w => {
+                    w_ul.innerHTML += `
+                        <li class="flex items-center justify-between p-3 border border-slate-800 rounded-xl bg-slate-900/30">
+                            <div>
+                                <h4 class="font-bold text-sm">${w.title} (${w.level})</h4>
+                                <p class="text-xs text-slate-400 truncate max-w-xs">${w.prompt}</p>
+                            </div>
+                            <button onclick="deleteTask('writing', ${w.id})" class="text-red-400 hover:text-red-500 transition"><i class="fa-solid fa-trash"></i></button>
+                        </li>
+                    `;
+                });
+
+                const s_ul = document.getElementById('admin-speakings-ul');
+                s_ul.innerHTML = speakings.length === 0 ? '<li class="text-slate-400 italic">Vazifalar yo'q.</li>' : '';
+                speakings.forEach(s => {
+                    s_ul.innerHTML += `
+                        <li class="flex items-center justify-between p-3 border border-slate-800 rounded-xl bg-slate-900/30">
+                            <div>
+                                <h4 class="font-bold text-sm">${s.title} (Part ${s.part} - ${s.level})</h4>
+                                <p class="text-xs text-slate-400 truncate max-w-xs">${s.prompt}</p>
+                            </div>
+                            <button onclick="deleteTask('speaking', ${s.id})" class="text-red-400 hover:text-red-500 transition"><i class="fa-solid fa-trash"></i></button>
+                        </li>
+                    `;
+                });
+                populateTasksPickers(writings, speakings);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteTask(type, id) {
+            if (!confirm("Ushbu topshiriqni o'chirmoqchimisiz?")) return;
+            try {
+                const res = await fetch(`${API_URL}/api/admin/${type}-tasks/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                if (res.ok) {
+                    alert("O'chirildi!");
+                    loadAdminTasks();
+                }
+            } catch (err) {
+                alert("Xatolik.");
+            }
+        }
+
+        function toggleTaskFields() {
+            const type = document.getElementById('task-type').value;
+            const speakingWrapper = document.getElementById('speaking-part-wrapper');
+            if (type === 'speaking') {
+                speakingWrapper.classList.remove('hidden');
+            } else {
+                speakingWrapper.classList.add('hidden');
+            }
+        }
+
+        async function saveTask() {
+            const type = document.getElementById('task-type').value;
+            const level = document.getElementById('task-level').value;
+            const part = parseInt(document.getElementById('task-part').value);
+            const title = document.getElementById('task-title').value.trim();
+            const prompt = document.getElementById('task-prompt').value.trim();
+            
+            if (!title || !prompt) {
+                alert("Sarlavha va promptni to'ldiring.");
+                return;
+            }
+
+            const payload = type === 'speaking'
+                ? { title, prompt, part, level, is_mock: false }
+                : { title, prompt, level, is_mock: false };
+
+            try {
+                const response = await fetch(`${API_URL}/api/admin/${type}-tasks`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (response.ok) {
+                    alert("Topshiriq saqlandi!");
+                    document.getElementById('task-title').value = '';
+                    document.getElementById('task-prompt').value = '';
+                    loadAdminTasks();
+                }
+            } catch (err) {
+                alert("Xatolik.");
+            }
+        }
+
+        async function loadAdminMocks() {
+            try {
+                const res = await fetch(`${API_URL}/api/admin/mock-exams`, {
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                const mocks = await res.json();
+                const tbody = document.getElementById('admin-mocks-tbody');
+                tbody.innerHTML = '';
+
+                mocks.forEach(m => {
+                    tbody.innerHTML += `
+                        <tr class="border-b border-slate-800 hover:bg-slate-900/20">
+                            <td class="p-3 font-semibold text-slate-400">${m.id}</td>
+                            <td class="p-3 text-slate-200 font-bold">${m.title}</td>
+                            <td class="p-3 text-slate-200">${m.price.toLocaleString()} UZS</td>
+                            <td class="p-3 text-slate-200">${m.questions_ids.length} ta</td>
+                            <td class="p-3 text-slate-200">${m.writing_ids.length} ta</td>
+                            <td class="p-3 text-slate-200">${m.speaking_ids.length} ta</td>
+                            <td class="p-3 text-right">
+                                <button onclick="deleteMock(${m.id})" class="text-red-400 hover:text-red-500 transition"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function deleteMock(id) {
+            if (!confirm("Ushbu mock imtihonini o'chirmoqchimisiz?")) return;
+            try {
+                const res = await fetch(`${API_URL}/api/admin/mock-exams/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                if (res.ok) {
+                    alert("O'chirildi!");
+                    loadAdminMocks();
+                }
+            } catch (err) {
+                alert("Xatolik.");
+            }
+        }
+
+        function populateQuestionsPickers(questions) {
+            const container = document.getElementById('mock-questions-picker');
+            container.innerHTML = '';
+            questions.forEach(q => {
+                container.innerHTML += `
+                    <label class="flex items-center gap-2 text-xs text-slate-350 cursor-pointer hover:text-white">
+                        <input type="checkbox" value="${q.id}" class="mock-q-checkbox">
+                        <span>[${q.section.toUpperCase()} Part ${q.part}] ${q.title}</span>
+                    </label>
+                `;
+            });
+        }
+
+        function populateTasksPickers(writings, speakings) {
+            const w_container = document.getElementById('mock-writings-picker');
+            w_container.innerHTML = '';
+            writings.forEach(w => {
+                w_container.innerHTML += `
+                    <label class="flex items-center gap-2 text-xs text-slate-350 cursor-pointer hover:text-white">
+                        <input type="checkbox" value="${w.id}" class="mock-w-checkbox">
+                        <span>${w.title} (${w.level})</span>
+                    </label>
+                `;
+            });
+
+            const s_container = document.getElementById('mock-speakings-picker');
+            s_container.innerHTML = '';
+            speakings.forEach(s => {
+                s_container.innerHTML += `
+                    <label class="flex items-center gap-2 text-xs text-slate-350 cursor-pointer hover:text-white">
+                        <input type="checkbox" value="${s.id}" class="mock-s-checkbox">
+                        <span>${s.title} (Part ${s.part} - ${s.level})</span>
+                    </label>
+                `;
+            });
+        }
+
+        async function saveMockExam() {
+            const title = document.getElementById('mock-title').value.trim();
+            const price = parseInt(document.getElementById('mock-price').value) || 0;
+            
+            if (!title) {
+                alert("Sarlavha yozing.");
+                return;
+            }
+
+            const questions_ids = Array.from(document.querySelectorAll('.mock-q-checkbox:checked')).map(el => parseInt(el.value));
+            const writing_ids = Array.from(document.querySelectorAll('.mock-w-checkbox:checked')).map(el => parseInt(el.value));
+            const speaking_ids = Array.from(document.querySelectorAll('.mock-s-checkbox:checked')).map(el => parseInt(el.value));
+
+            if (questions_ids.length === 0 && writing_ids.length === 0 && speaking_ids.length === 0) {
+                alert("Kamida bitta topshiriq tanlang.");
+                return;
+            }
+
+            const payload = { title, price, questions_ids, writing_ids, speaking_ids, active: true };
+
+            try {
+                const res = await fetch(`${API_URL}/api/admin/mock-exams`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    alert("Mock Imtihoni yaratildi!");
+                    document.getElementById('mock-title').value = '';
+                    document.getElementById('mock-price').value = '30000';
+                    document.querySelectorAll('.mock-q-checkbox, .mock-w-checkbox, .mock-s-checkbox').forEach(el => el.checked = false);
+                    loadAdminMocks();
+                }
+            } catch (err) {
+                alert("Xatolik.");
+            }
+        }
+    </script>
+</body>
+</html>
