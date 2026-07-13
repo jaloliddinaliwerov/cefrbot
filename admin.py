@@ -51,7 +51,7 @@ async def admin_cmd(message: types.Message):
     if not backend_url.startswith("http"):
         backend_url = f"https://{backend_url}"
         
-    admin_link = f"{web_url}?token={token}&api_url={backend_url}#admin"
+    admin_link = f"{web_url}?token={token}&api_url={backend_url}"
     
     text = (
         "👑 **Admin Panelga Xush Kelibsiz!**\n\n"
