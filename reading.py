@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement, Achievement
-from handlers.states import ReadingState
+from states import ReadingState
 
 router = Router()
 
@@ -40,7 +40,7 @@ async def back_to_main_menu_cb(callback: types.CallbackQuery):
     await callback.message.delete()
     await callback.message.answer("Asosiy menyudasiz.", reply_markup=types.ReplyKeyboardRemove())
     # Send start commands to restore ReplyKeyboard
-    from handlers.common import get_main_keyboard
+    from common import get_main_keyboard
     await callback.message.answer("Darslarni tanlang:", reply_markup=get_main_keyboard())
 
 @router.callback_query(F.data.startswith("reading_part:"))

@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select, func, desc
 from database import DBContext, User, UserProgress, UserIncorrectQuestion, WritingSubmission, SpeakingSubmission, UserAchievement, Achievement, Question
-from handlers.states import ReadingState
+from states import ReadingState
 
 router = Router()
 

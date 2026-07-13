@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, Message
 from sqlalchemy import select
 from database import DBContext, MockExam, MockPurchase, Question, WritingTask, SpeakingTask, User, UserAchievement, UserProgress
-from handlers.states import MockState
+from states import MockState
 from ai_service import evaluate_writing, evaluate_speaking
 
 router = Router()
@@ -77,7 +77,7 @@ async def mock_exam_menu(message: types.Message):
 async def back_to_main_menu_cb(callback: types.CallbackQuery):
     await callback.message.delete()
     await callback.message.answer("Asosiy menyudasiz.", reply_markup=types.ReplyKeyboardRemove())
-    from handlers.common import get_main_keyboard
+    from common import get_main_keyboard
     await callback.message.answer("Darslarni tanlang:", reply_markup=get_main_keyboard())
 
 @router.callback_query(F.data.startswith("mock_view:"))

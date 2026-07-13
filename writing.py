@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 from database import DBContext, WritingTask, WritingSubmission, User, UserAchievement
-from handlers.states import WritingState
+from states import WritingState
 from ai_service import evaluate_writing
 
 router = Router()
@@ -36,7 +36,7 @@ async def writing_menu(message: types.Message):
 async def back_to_main_menu_cb(callback: types.CallbackQuery):
     await callback.message.delete()
     await callback.message.answer("Asosiy menyudasiz.", reply_markup=types.ReplyKeyboardRemove())
-    from handlers.common import get_main_keyboard
+    from common import get_main_keyboard
     await callback.message.answer("Darslarni tanlang:", reply_markup=get_main_keyboard())
 
 @router.callback_query(F.data.startswith("writing_task:"))

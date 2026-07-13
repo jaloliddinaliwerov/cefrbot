@@ -11,7 +11,7 @@ from database import (
     WritingTask, WritingSubmission, SpeakingTask, SpeakingSubmission,
     MockExam, MockPurchase, Achievement, UserAchievement
 )
-from handlers.admin import verify_admin_token
+from admin import verify_admin_token
 
 app = FastAPI(title="CEFR Bot Backend API")
 
