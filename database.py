@@ -10,7 +10,7 @@ from sqlalchemy.orm import declarative_base, relationship
 # Determine Database URL
 # For Railway PostgreSQL: DATABASE_URL is usually postgres://...
 # We need postgresql+asyncpg://... for async SQLAlchemy
-db_url = os.getenv("DATABASE_URL")
+db_url = os.getenv("DATABASE_PRIVATE_URL") or os.getenv("DATABASE_URL")
 if db_url:
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
