@@ -33,7 +33,13 @@ if db_url.startswith("postgresql"):
     except Exception:
         pass
 
-engine = create_async_engine(db_url, connect_args=connect_args, echo=False)
+engine = create_async_engine(
+    db_url,
+    connect_args=connect_args,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800
+)
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 Base = declarative_base()
