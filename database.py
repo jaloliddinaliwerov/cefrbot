@@ -159,9 +159,17 @@ class UserAchievement(Base):
 # Database helper functions
 async def init_db():
     async with engine.begin() as conn:
-        # Create all tables
         await conn.run_sync(Base.metadata.create_all)
-    
+        
+    # Auto-migration: Add is_premium column if it doesn't exist
+    async with async_session() as session:
+        try:
+            from sqlalchemy import text
+            await session.execute(text("ALTER TABLE users ADD COLUMN is_premium BOOLEAN DEFAULT FALSE;"))
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            
     # Insert default achievements
     async with async_session() as session:
         default_achievements = [
