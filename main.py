@@ -2,7 +2,6 @@ import asyncio
 import logging
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 
@@ -10,20 +9,22 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
+
+# 1. USER_ROUTER ni import qilish (Shu joyi muammo edi)
 from user_handlers import user_router
 
 logging.basicConfig(level=logging.INFO)
 
-# 1. Bot va Dispatcher yaratamiz
+# 2. Bot va Dispatcher yaratamiz
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
+
+# 3. Routerni ulaymiz
 dp.include_router(user_router)
 
-# 2. FastAPI serverini yaratamiz
+# 4. FastAPI serverini yaratamiz
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
-
-# ==================== WEB APP SAHIFALARI ====================
 
 # ==================== WEB APP SAHIFALARI ====================
 
@@ -36,7 +37,6 @@ async def serve_test_app(request: Request, section: str, part: str):
             {"id": 2, "q": "Who is known as the father of computers?", "options": ["Charles Babbage", "Alan Turing", "Steve Jobs"]}
         ]
     }
-    # view="test" degan parametr qoshib yuboramiz
     return templates.TemplateResponse("app.html", {
         "request": request, 
         "view": "test", 
@@ -47,7 +47,6 @@ async def serve_test_app(request: Request, section: str, part: str):
 
 @app.get("/admin")
 async def serve_admin_app(request: Request):
-    # view="admin" parametrini beramiz
     return templates.TemplateResponse("app.html", {
         "request": request, 
         "view": "admin"
@@ -63,7 +62,6 @@ class TestSubmit(BaseModel):
 
 @app.post("/api/submit_test")
 async def submit_test(data: TestSubmit):
-    # Foydalanuvchidan javoblar keldi. Tekshiramiz:
     correct_answers = {"1": "1800s", "2": "Charles Babbage"}
     score = 0
     
@@ -73,12 +71,10 @@ async def submit_test(data: TestSubmit):
             
     total = len(correct_answers)
     
-    # Foydalanuvchiga bot orqali natijani yuboramiz
     result_text = (
         f"📊 <b>Test natijangiz:</b>\n\n"
-        f"Bo'lim: {data.section.capitalize()} | {data.part}\n"
+        f"Bo'lim: {data.section.capitalize()} | Part {data.part}\n"
         f"To'g'ri javoblar: {score} / {total}\n"
-        f"Sizning javoblaringiz: {data.answers}"
     )
     
     try:
@@ -92,6 +88,8 @@ async def submit_test(data: TestSubmit):
 
 @app.on_event("startup")
 async def on_startup():
+    # Eski webhooklarni tozalab, keyin ishga tushirish
+    await bot.delete_webhook(drop_pending_updates=True)
     asyncio.create_task(dp.start_polling(bot))
 
 if __name__ == "__main__":
