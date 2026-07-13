@@ -82,10 +82,11 @@ async def get_leaderboard():
         return [
             {
                 "id": u.id,
-                "first_name": u.first_name,
+                "first_name": u.first_name + (" 👑" if getattr(u, "is_premium", False) else ""),
                 "username": u.username,
                 "xp": u.xp,
-                "streak": u.streak
+                "streak": u.streak,
+                "is_premium": getattr(u, "is_premium", False)
             } for u in users
         ]
 

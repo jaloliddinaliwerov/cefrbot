@@ -49,6 +49,7 @@ class User(Base):
     streak = Column(Integer, default=0)
     last_active = Column(Date, nullable=True)
     joined_at = Column(DateTime, default=datetime.datetime.utcnow)
+    is_premium = Column(Boolean, default=False)
 
 class Question(Base):
     __tablename__ = "questions"

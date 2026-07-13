@@ -10,29 +10,12 @@ router = Router()
 import os
 
 def get_main_keyboard() -> ReplyKeyboardMarkup:
-    web_app_url = os.getenv("WEB_APP_URL")
-    site_url = os.getenv("SITE_URL")
     keyboard = [
         [KeyboardButton(text="📖 Reading"), KeyboardButton(text="🎧 Listening")],
         [KeyboardButton(text="✍️ Writing"), KeyboardButton(text="🗣️ Speaking")],
         [KeyboardButton(text="👤 Profil & Natijalar"), KeyboardButton(text="🏆 Leaderboard")],
         [KeyboardButton(text="🔥 Daily Challenge"), KeyboardButton(text="🎓 Mock Exam")]
     ]
-    if web_app_url:
-        web_app_url = web_app_url.strip()
-        if not web_app_url.startswith("http"):
-            web_app_url = f"https://{web_app_url}"
-        
-        if site_url:
-            site_clean = site_url.strip().rstrip("/")
-            if not site_clean.startswith("http"):
-                site_clean = f"https://{site_clean}"
-            if "?" in web_app_url:
-                web_app_url = f"{web_app_url}&api_url={site_clean}"
-            else:
-                web_app_url = f"{web_app_url}?api_url={site_clean}"
-                
-        keyboard.append([KeyboardButton(text="📊 Web Dashboard", web_app=types.WebAppInfo(url=web_app_url))])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 @router.message(CommandStart())
@@ -40,6 +23,7 @@ async def start_cmd(message: types.Message):
     user_id = message.from_user.id
     username = message.from_user.username
     first_name = message.from_user.first_name
+    is_premium = message.from_user.is_premium or False
 
     async with DBContext() as session:
         # Check if user exists
@@ -52,6 +36,7 @@ async def start_cmd(message: types.Message):
                 id=user_id,
                 username=username,
                 first_name=first_name,
+                is_premium=is_premium,
                 joined_at=datetime.datetime.utcnow(),
                 streak=1,
                 last_active=datetime.date.today()
@@ -67,6 +52,7 @@ async def start_cmd(message: types.Message):
             # Update user info if changed
             user.username = username
             user.first_name = first_name
+            user.is_premium = is_premium
             
             # Check Streak
             today = datetime.date.today()

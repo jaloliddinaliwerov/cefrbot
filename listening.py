@@ -198,6 +198,8 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
         user_res = await session.execute(user_stmt)
         user = user_res.scalar_one_or_none()
         if user:
+            if user.is_premium:
+                xp_earned *= 2
             user.xp += xp_earned
             
             # Unlock achievements
