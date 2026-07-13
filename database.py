@@ -2,7 +2,7 @@ import os
 import json
 import datetime
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, Date, Text, ForeignKey, JSON, select
+    Column, Integer, String, Boolean, DateTime, Date, Text, ForeignKey, JSON, select, BigInteger
 )
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base, relationship
@@ -29,7 +29,7 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(Integer, primary_key=True)  # Telegram ID
+    id = Column(BigInteger, primary_key=True)  # Telegram ID
     username = Column(String(100), nullable=True)
     first_name = Column(String(100), nullable=True)
     xp = Column(Integer, default=0)
@@ -53,7 +53,7 @@ class UserProgress(Base):
     __tablename__ = "user_progress"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(BigInteger, ForeignKey("users.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
     score = Column(Integer)
     max_score = Column(Integer)
@@ -64,7 +64,7 @@ class UserIncorrectQuestion(Base):
     __tablename__ = "user_incorrect_questions"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(BigInteger, ForeignKey("users.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
     wrong_answers_json = Column(JSON, nullable=True)  # Store wrong answers
 
@@ -81,7 +81,7 @@ class WritingSubmission(Base):
     __tablename__ = "writing_submissions"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(BigInteger, ForeignKey("users.id"))
     task_id = Column(Integer, ForeignKey("writing_tasks.id"))
     text = Column(Text)
     feedback_json = Column(JSON)  # {"grammar_errors": [], "vocab": "", "structure": "", "level": "B2", "score": 80, "advice": ""}
@@ -102,7 +102,7 @@ class SpeakingSubmission(Base):
     __tablename__ = "speaking_submissions"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(BigInteger, ForeignKey("users.id"))
     task_id = Column(Integer, ForeignKey("speaking_tasks.id"))
     voice_file_id = Column(String(255))
     transcription = Column(Text, nullable=True)
@@ -125,7 +125,7 @@ class MockPurchase(Base):
     __tablename__ = "mock_purchases"
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(BigInteger, ForeignKey("users.id"))
     mock_id = Column(Integer, ForeignKey("mock_exams.id"))
     status = Column(String(50), default="completed")  # 'pending', 'completed'
     purchased_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -141,7 +141,7 @@ class Achievement(Base):
 class UserAchievement(Base):
     __tablename__ = "user_achievements"
     
-    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    user_id = Column(BigInteger, ForeignKey("users.id"), primary_key=True)
     achievement_id = Column(String(50), ForeignKey("achievements.id"), primary_key=True)
     unlocked_at = Column(DateTime, default=datetime.datetime.utcnow)
 
