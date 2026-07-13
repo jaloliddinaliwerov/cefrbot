@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
 from config import BOT_TOKEN
-from bot_handlers import bot_router
+from user_handlers import user_router
 
 logging.basicConfig(level=logging.INFO)
 
