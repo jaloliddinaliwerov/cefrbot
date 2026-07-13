@@ -51,7 +51,7 @@ async def admin_cmd(message: types.Message):
     )
     
     markup = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", url=admin_link)]
+        [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", web_app=types.WebAppInfo(url=admin_link))]
     ])
     
     await message.answer(text, reply_markup=markup, parse_mode="Markdown")

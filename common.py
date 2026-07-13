@@ -7,13 +7,18 @@ from database import DBContext, User
 
 router = Router()
 
+import os
+
 def get_main_keyboard() -> ReplyKeyboardMarkup:
+    web_app_url = os.getenv("WEB_APP_URL")
     keyboard = [
         [KeyboardButton(text="📖 Reading"), KeyboardButton(text="🎧 Listening")],
         [KeyboardButton(text="✍️ Writing"), KeyboardButton(text="🗣️ Speaking")],
         [KeyboardButton(text="👤 Profil & Natijalar"), KeyboardButton(text="🏆 Leaderboard")],
         [KeyboardButton(text="🔥 Daily Challenge"), KeyboardButton(text="🎓 Mock Exam")]
     ]
+    if web_app_url:
+        keyboard.append([KeyboardButton(text="📊 Web Dashboard", web_app=types.WebAppInfo(url=web_app_url))])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 @router.message(CommandStart())
