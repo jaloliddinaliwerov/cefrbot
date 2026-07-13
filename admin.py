@@ -40,8 +40,8 @@ async def admin_cmd(message: types.Message):
         
     token = get_admin_token(message.from_user.id)
     
-    # Web URL is Vercel address
-    web_url = os.getenv("WEB_APP_URL") or "https://cerfbotweb.vercel.com"
+    # Web URL is Vercel address (support both WEB_APP_URL and WEBAPP_URL)
+    web_url = os.getenv("WEB_APP_URL") or os.getenv("WEBAPP_URL") or "https://cefrbotweb.vercel.app"
     web_url = web_url.strip().rstrip("/")
     if not web_url.startswith("http"):
         web_url = f"https://{web_url}"
