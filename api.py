@@ -321,6 +321,76 @@ async def upload_audio(file: UploadFile = File(...), admin: str = Depends(get_cu
         
     return {"status": "success", "url": f"/uploads/{new_filename}"}
 
+from fastapi.responses import StreamingResponse
+from fastapi import Query
+import httpx
+
+@app.get("/api/admin/users")
+async def admin_get_users(admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(User).order_by(User.xp.desc())
+        res = await session.execute(stmt)
+        users = res.scalars().all()
+        return [
+            {
+                "id": u.id,
+                "first_name": u.first_name,
+                "username": u.username,
+                "xp": u.xp,
+                "streak": u.streak,
+                "is_premium": getattr(u, "is_premium", False)
+            } for u in users
+        ]
+
+@app.get("/api/admin/speaking-submissions")
+async def admin_get_speaking_submissions(admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(SpeakingSubmission, User, SpeakingTask).join(
+            User, SpeakingSubmission.user_id == User.id
+        ).join(
+            SpeakingTask, SpeakingSubmission.task_id == SpeakingTask.id
+        ).order_by(SpeakingSubmission.submitted_at.desc())
+        
+        res = await session.execute(stmt)
+        rows = res.all()
+        
+        return [
+            {
+                "id": sub.id,
+                "user_name": u.first_name or "Foydalanuvchi",
+                "user_username": u.username,
+                "task_title": task.title,
+                "task_part": task.part,
+                "task_level": task.level,
+                "voice_file_id": sub.voice_file_id,
+                "transcription": sub.transcription,
+                "score": sub.score,
+                "submitted_at": sub.submitted_at.strftime("%Y-%m-%d %H:%M")
+            } for sub, u, task in rows
+        ]
+
+@app.get("/api/admin/voice/{file_id}")
+async def get_voice_file(file_id: str, token: str = Query(...)):
+    if not verify_admin_token(token):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    try:
+        bot_token = os.getenv("BOT_TOKEN")
+        file_info_url = f"https://api.telegram.org/bot{bot_token}/getFile?file_id={file_id}"
+        async with httpx.AsyncClient() as client:
+            res = await client.get(file_info_url)
+            if res.status_code != 200:
+                raise HTTPException(status_code=400, detail="Telegram'dan ovozli faylni olishda xatolik")
+            file_path = res.json()["result"]["file_path"]
+            download_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
+            
+            async def stream_audio():
+                async with client.stream("GET", download_url) as stream_res:
+                    async for chunk in stream_res.iter_bytes():
+                        yield chunk
+            return StreamingResponse(stream_audio(), media_type="audio/ogg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Serve frontend static assets if they exist (local testing / simple deployment)
 if os.path.exists("frontend"):
     app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
