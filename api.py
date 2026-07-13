@@ -210,6 +210,24 @@ async def admin_delete_question(q_id: int, admin: str = Depends(get_current_admi
         await session.commit()
         return {"status": "success"}
 
+@app.put("/api/admin/questions/{q_id}")
+async def admin_update_question(q_id: int, q: QuestionCreate, admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(Question).where(Question.id == q_id)
+        res = await session.execute(stmt)
+        question = res.scalar_one_or_none()
+        if not question:
+            raise HTTPException(status_code=404, detail="Question not found")
+        question.section = q.section
+        question.part = q.part
+        question.title = q.title
+        question.text = q.text
+        question.audio_url = q.audio_url
+        question.questions_json = q.questions_json
+        question.is_mock = q.is_mock
+        await session.commit()
+        return {"status": "success"}
+
 @app.get("/api/admin/writing-tasks")
 async def admin_get_writings(admin: str = Depends(get_current_admin)):
     async with DBContext() as session:
@@ -235,6 +253,21 @@ async def admin_delete_writing(w_id: int, admin: str = Depends(get_current_admin
     async with DBContext() as session:
         stmt = delete(WritingTask).where(WritingTask.id == w_id)
         await session.execute(stmt)
+        await session.commit()
+        return {"status": "success"}
+
+@app.put("/api/admin/writing-tasks/{w_id}")
+async def admin_update_writing(w_id: int, w: WritingTaskCreate, admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(WritingTask).where(WritingTask.id == w_id)
+        res = await session.execute(stmt)
+        task = res.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="Writing task not found")
+        task.title = w.title
+        task.prompt = w.prompt
+        task.level = w.level
+        task.is_mock = w.is_mock
         await session.commit()
         return {"status": "success"}
 
@@ -267,6 +300,22 @@ async def admin_delete_speaking(s_id: int, admin: str = Depends(get_current_admi
         await session.commit()
         return {"status": "success"}
 
+@app.put("/api/admin/speaking-tasks/{s_id}")
+async def admin_update_speaking(s_id: int, s: SpeakingTaskCreate, admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(SpeakingTask).where(SpeakingTask.id == s_id)
+        res = await session.execute(stmt)
+        task = res.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="Speaking task not found")
+        task.title = s.title
+        task.prompt = s.prompt
+        task.part = s.part
+        task.level = s.level
+        task.is_mock = s.is_mock
+        await session.commit()
+        return {"status": "success"}
+
 @app.get("/api/admin/mock-exams")
 async def admin_get_mocks(admin: str = Depends(get_current_admin)):
     async with DBContext() as session:
@@ -294,6 +343,23 @@ async def admin_delete_mock(m_id: int, admin: str = Depends(get_current_admin)):
     async with DBContext() as session:
         stmt = delete(MockExam).where(MockExam.id == m_id)
         await session.execute(stmt)
+        await session.commit()
+        return {"status": "success"}
+
+@app.put("/api/admin/mock-exams/{m_id}")
+async def admin_update_mock(m_id: int, m: MockExamCreate, admin: str = Depends(get_current_admin)):
+    async with DBContext() as session:
+        stmt = select(MockExam).where(MockExam.id == m_id)
+        res = await session.execute(stmt)
+        mock = res.scalar_one_or_none()
+        if not mock:
+            raise HTTPException(status_code=404, detail="Mock exam not found")
+        mock.title = m.title
+        mock.price = m.price
+        mock.questions_ids = m.questions_ids
+        mock.writing_ids = m.writing_ids
+        mock.speaking_ids = m.speaking_ids
+        mock.active = m.active
         await session.commit()
         return {"status": "success"}
 
