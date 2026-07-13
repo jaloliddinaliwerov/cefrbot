@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, status, Request
+from fastapi import FastAPI, Depends, HTTPException, Header, status, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -295,6 +295,30 @@ async def admin_delete_mock(m_id: int, admin: str = Depends(get_current_admin)):
         await session.execute(stmt)
         await session.commit()
         return {"status": "success"}
+
+import shutil
+
+# Make sure uploads folder exists
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+@app.post("/api/admin/upload-audio")
+async def upload_audio(file: UploadFile = File(...), admin: str = Depends(get_current_admin)):
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".mp3", ".wav", ".ogg", ".m4a", ".mp4"):
+        raise HTTPException(
+            status_code=400,
+            detail="Faqat audio/video formatidagi fayllarni yuklash mumkin (.mp3, .wav, .ogg, .m4a, .mp4)"
+        )
+    
+    import uuid
+    new_filename = f"{uuid.uuid4()}{ext}"
+    filepath = os.path.join("uploads", new_filename)
+    
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    return {"status": "success", "url": f"/uploads/{new_filename}"}
 
 # Serve frontend static assets if they exist (local testing / simple deployment)
 if os.path.exists("frontend"):

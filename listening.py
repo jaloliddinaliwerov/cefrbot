@@ -69,11 +69,17 @@ async def start_listening_test(message: types.Message, question: Question, part:
 
     await message.answer(f"🎧 **Listening - Part {part}**\n📌 **{question.title}**\n\nAudio yuklanmoqda, iltimos kuting...")
 
-    # Send audio
     try:
         if question.audio_url:
+            audio_link = question.audio_url
+            if audio_link.startswith("/"):
+                import os
+                site_url = os.getenv("SITE_URL", "https://cerfbotweb.vercel.com").strip().rstrip("/")
+                if not site_url.startswith("http"):
+                    site_url = f"https://{site_url}"
+                audio_link = f"{site_url}{audio_link}"
             await message.answer_audio(
-                audio=question.audio_url,
+                audio=audio_link,
                 caption=f"🎧 Listening Part {part} uchun audio fayl."
             )
         else:
