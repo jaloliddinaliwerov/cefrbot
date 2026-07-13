@@ -29,7 +29,7 @@ if db_url.startswith("postgresql"):
         if host in ("postgres", "localhost", "127.0.0.1") or (host and "railway.internal" in host):
             connect_args = {"ssl": False}
         else:
-            connect_args = {"ssl": "require"}
+            connect_args = {"ssl": True}
     except Exception:
         pass
 
