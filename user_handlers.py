@@ -23,7 +23,7 @@ PREMIUM_EMOJIS = {
 }
 
 def custom_emoji(emoji_id: str, fallback: str) -> str:
-    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
+   return fallback
 
 # ==========================================
 # ASOSIY MENU (START)
