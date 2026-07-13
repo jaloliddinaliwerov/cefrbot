@@ -1,5 +1,2 @@
 aiogram>=3.7.0
-fastapi
-uvicorn
 python-dotenv
-jinja2
