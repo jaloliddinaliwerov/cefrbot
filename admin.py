@@ -39,10 +39,19 @@ async def admin_cmd(message: types.Message):
         return
         
     token = get_admin_token(message.from_user.id)
-    site_url = os.getenv("SITE_URL", "https://cerfbotweb.vercel.com").strip().rstrip("/")
-    if not site_url.startswith("http"):
-        site_url = f"https://{site_url}"
-    admin_link = f"{site_url}?token={token}#admin"
+    
+    # Web URL is Vercel address
+    web_url = os.getenv("WEB_APP_URL") or "https://cerfbotweb.vercel.com"
+    web_url = web_url.strip().rstrip("/")
+    if not web_url.startswith("http"):
+        web_url = f"https://{web_url}"
+        
+    # Backend URL is Railway address
+    backend_url = os.getenv("SITE_URL", "").strip().rstrip("/")
+    if not backend_url.startswith("http"):
+        backend_url = f"https://{backend_url}"
+        
+    admin_link = f"{web_url}?token={token}&api_url={backend_url}#admin"
     
     text = (
         "👑 **Admin Panelga Xush Kelibsiz!**\n\n"
@@ -58,7 +67,18 @@ async def admin_cmd(message: types.Message):
     
     await message.answer(text, reply_markup=markup, parse_mode="Markdown")
 
-@router.message()
+def contains_custom_emoji(message: types.Message) -> bool:
+    if message.entities:
+        for entity in message.entities:
+            if entity.type == "custom_emoji":
+                return True
+    if message.caption_entities:
+        for entity in message.caption_entities:
+            if entity.type == "custom_emoji":
+                return True
+    return False
+
+@router.message(contains_custom_emoji)
 async def admin_custom_emoji_handler(message: types.Message):
     user_id_str = str(message.from_user.id)
     admin_ids = os.getenv("ADMIN_IDS", "").split(",")

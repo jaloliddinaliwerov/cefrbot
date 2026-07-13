@@ -43,9 +43,13 @@ class EmojiAPIMiddleware(BaseRequestMiddleware):
         if isinstance(method, (SendMessage, EditMessageText)):
             if method.text:
                 orig_parse_mode = method.parse_mode
-                if orig_parse_mode == "Markdown" or orig_parse_mode is None or orig_parse_mode == "MarkdownV2":
+                parse_mode_str = orig_parse_mode.value if hasattr(orig_parse_mode, "value") else orig_parse_mode
+                
+                if parse_mode_str in ("Markdown", "MarkdownV2", None):
                     method.text = md_to_html(method.text)
                     method.parse_mode = "HTML"
+                    if hasattr(method, "__fields_set__"):
+                        method.__fields_set__.add("parse_mode")
                 method.text = wrap_emojis_with_premium(method.text)
         return await make_request(bot, method)
 

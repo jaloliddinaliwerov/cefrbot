@@ -60,23 +60,26 @@ async def profile_menu(message: types.Message):
     # Format text
     joined_date = user.joined_at.strftime("%Y-%m-%d")
     
+    is_premium_user = getattr(user, "is_premium", False)
+    premium_badge = ' <tg-emoji emoji-id="7489288727785635936">👑</tg-emoji> (Premium 2x XP)' if is_premium_user else ""
+    
     profile_text = (
-        f"👤 **Foydalanuvchi Profili**\n\n"
-        f"🏷️ **Ism:** {user.first_name}\n"
-        f"🔑 **Telegram ID:** `{user.id}`\n"
-        f"📅 **A'zolik sanasi:** {joined_date}\n\n"
-        f"🔥 **Kunlik Streak:** {user.streak} kun\n"
-        f"⚡️ **Jami XP:** {user.xp} XP\n\n"
-        f"📊 **Muvaffaqiyatlar ko'rsatkichi:**\n"
+        f"👤 <b>Foydalanuvchi Profili</b>\n\n"
+        f"🏷️ <b>Ism:</b> {user.first_name}{premium_badge}\n"
+        f"🔑 <b>Telegram ID:</b> <code>{user.id}</code>\n"
+        f"📅 <b>A'zolik sanasi:</b> {joined_date}\n\n"
+        f"🔥 <b>Kunlik Streak:</b> {user.streak} kun\n"
+        f"⚡️ <b>Jami XP:</b> {user.xp} XP\n\n"
+        f"📊 <b>Muvaffaqiyatlar ko'rsatkichi:</b>\n"
         f"• 📖/🎧 Testlar soni: {tests_count or 0} ta (O'rtacha: {float(avg_test_score or 0.0):.1f}%)\n"
         f"• ✍️ Writing topshiriqlar: {writing_count or 0} ta (O'rtacha baho: {float(avg_writing_score or 0.0):.1f}/100)\n"
         f"• 🗣️ Speaking topshiriqlar: {speaking_count or 0} ta (O'rtacha baho: {float(avg_speaking_score or 0.0):.1f}/100)\n\n"
-        f"🏆 **Yutuqlar ({len(achievements)} ta):**\n"
+        f"🏆 <b>Yutuqlar ({len(achievements)} ta):</b>\n"
     )
     
     if achievements:
         for ach in achievements:
-            profile_text += f"🎖️ **{ach.name}** - {ach.description}\n"
+            profile_text += f"🎖️ <b>{ach.name}</b> - {ach.description}\n"
     else:
         profile_text += "Hozircha yutuqlar yo'q. Testlarni ishlashda davom eting! 💪\n"
 
@@ -94,7 +97,7 @@ async def profile_menu(message: types.Message):
         InlineKeyboardButton(text="🏠 Menu", callback_data="reading_back_main")
     ])
     
-    await message.answer(profile_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=markup), parse_mode="Markdown")
+    await message.answer(profile_text, reply_markup=InlineKeyboardMarkup(inline_keyboard=markup), parse_mode="HTML")
 
 @router.callback_query(F.data == "profile_refresh")
 async def refresh_profile(callback: types.CallbackQuery):
@@ -116,18 +119,20 @@ async def leaderboard_menu(message: types.Message):
         rank_res = await session.execute(rank_stmt)
         user_rank = (rank_res.scalar() or 0) + 1
 
-    leaderboard_text = "🏆 **CEFR Peshqadamlar Jadvali (Top 10)**\n\n"
+    leaderboard_text = "🏆 <b>CEFR Peshqadamlar Jadvali (Top 10)</b>\n\n"
     
     medal_emojis = {1: "🥇", 2: "🥈", 3: "🥉"}
     
     for idx, user in enumerate(top_users, 1):
         medal = medal_emojis.get(idx, f" {idx}. ")
         name = user.first_name or "Foydalanuvchi"
-        leaderboard_text += f"{medal} **{name}** - {user.xp} XP (Streak: {user.streak}🔥)\n"
+        if getattr(user, "is_premium", False):
+            name += ' <tg-emoji emoji-id="7489288727785635936">👑</tg-emoji>'
+        leaderboard_text += f"{medal} <b>{name}</b> - {user.xp} XP (Streak: {user.streak}🔥)\n"
         
-    leaderboard_text += f"\n\n👤 **Sizning o'rningiz:** {user_rank}-o'rin"
+    leaderboard_text += f"\n\n👤 <b>Sizning o'rningiz:</b> {user_rank}-o'rin"
     
-    await message.answer(leaderboard_text, parse_mode="Markdown")
+    await message.answer(leaderboard_text, parse_mode="HTML")
 
 @router.message(F.text == "🔥 Daily Challenge")
 async def daily_challenge_menu(message: types.Message, state: FSMContext):
