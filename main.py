@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 # 1. Bot va Dispatcher yaratamiz
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode='HTML'))
 dp = Dispatcher()
-dp.include_router(bot_router)
+dp.include_router(user_router)
 
 # 2. FastAPI serverini yaratamiz
 app = FastAPI()
