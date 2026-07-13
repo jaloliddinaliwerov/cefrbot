@@ -20,7 +20,20 @@ else:
     db_url = "sqlite+aiosqlite:///cefr_bot.db"
 
 # Create engine and session maker
-engine = create_async_engine(db_url, echo=False)
+connect_args = {}
+if db_url.startswith("postgresql"):
+    import urllib.parse
+    try:
+        parsed = urllib.parse.urlparse(db_url)
+        host = parsed.hostname
+        if host in ("postgres", "localhost", "127.0.0.1") or (host and "railway.internal" in host):
+            connect_args = {"ssl": False}
+        else:
+            connect_args = {"ssl": "require"}
+    except Exception:
+        pass
+
+engine = create_async_engine(db_url, connect_args=connect_args, echo=False)
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 Base = declarative_base()
