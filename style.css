@@ -1,0 +1,219 @@
+/* Custom Styling for CEFR Prep Hub Dashboard */
+
+body {
+    background-color: #030712;
+    background-image: 
+        radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.08) 0px, transparent 50%);
+    background-attachment: fixed;
+}
+
+/* Glassmorphism card utility */
+.glass-card {
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(12px);
+    border-radius: 1rem;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.glass-card:hover {
+    border-color: rgba(14, 165, 233, 0.2);
+}
+
+/* Navigation Buttons */
+.nav-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #94a3b8;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+    color: #f1f5f9;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.active-nav {
+    color: #0ea5e9;
+    background-color: rgba(14, 165, 233, 0.08);
+    border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+.active-nav:hover {
+    color: #0ea5e9;
+    background-color: rgba(14, 165, 233, 0.12);
+}
+
+/* Mobile Nav Buttons */
+.mobile-nav-btn {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #94a3b8;
+    border-radius: 0.5rem;
+    text-align: left;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.mobile-nav-btn:hover {
+    color: #f1f5f9;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Input Fields */
+.input-field {
+    width: 100%;
+    background-color: rgba(3, 7, 18, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    padding: 0.625rem 0.875rem;
+    color: #f8fafc;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    outline: none;
+}
+
+.input-field:focus {
+    border-color: #0ea5e9;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+}
+
+/* Buttons */
+.btn-primary {
+    background: linear-gradient(135deg, #0ea5e9 0%, #4f46e5 100%);
+    color: #ffffff;
+    font-weight: 500;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.15);
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(14, 165, 233, 0.25);
+    filter: brightness(1.05);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background-color: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #cbd5e1;
+    font-weight: 500;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+    color: #f8fafc;
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Stats Cards */
+.stat-card {
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 1.25rem;
+    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 7.5rem;
+    transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.stat-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #94a3b8;
+    letter-spacing: 0.05em;
+}
+
+.stat-val {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-top: 0.5rem;
+}
+
+.stat-sub {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+/* Admin subnav */
+.admin-sub-btn {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.admin-sub-btn:hover {
+    color: #e2e8f0;
+}
+
+.active-admin-sub {
+    color: #0ea5e9;
+    border-color: #0ea5e9;
+}
+
+/* Achievement item design */
+.badge-unlocked {
+    background: rgba(16, 185, 129, 0.05);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+}
+.badge-locked {
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    opacity: 0.5;
+}
+
+/* Custom Scrollbar for modern feel */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
