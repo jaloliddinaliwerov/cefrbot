@@ -25,10 +25,10 @@ templates = Jinja2Templates(directory="templates")
 
 # ==================== WEB APP SAHIFALARI ====================
 
+# ==================== WEB APP SAHIFALARI ====================
+
 @app.get("/test/{section}/{part}")
 async def serve_test_app(request: Request, section: str, part: str):
-    # Bu yerda bazadan shu section va part ga oid savollar olinadi
-    # Hozircha namunaviy ma'lumot beramiz
     mock_data = {
         "text": "The history of computers dates back to the 1800s...",
         "questions": [
@@ -36,11 +36,22 @@ async def serve_test_app(request: Request, section: str, part: str):
             {"id": 2, "q": "Who is known as the father of computers?", "options": ["Charles Babbage", "Alan Turing", "Steve Jobs"]}
         ]
     }
-    return templates.TemplateResponse("test_app.html", {"request": request, "section": section, "part": part, "data": mock_data})
+    # view="test" degan parametr qoshib yuboramiz
+    return templates.TemplateResponse("app.html", {
+        "request": request, 
+        "view": "test", 
+        "section": section, 
+        "part": part, 
+        "data": mock_data
+    })
 
 @app.get("/admin")
 async def serve_admin_app(request: Request):
-    return templates.TemplateResponse("admin_app.html", {"request": request})
+    # view="admin" parametrini beramiz
+    return templates.TemplateResponse("app.html", {
+        "request": request, 
+        "view": "admin"
+    })
 
 # ==================== API ENDPOINTLAR ====================
 
