@@ -39,7 +39,9 @@ async def admin_cmd(message: types.Message):
         return
         
     token = get_admin_token(message.from_user.id)
-    site_url = os.getenv("SITE_URL", "https://cerfbotweb.vercel.com").rstrip("/")
+    site_url = os.getenv("SITE_URL", "https://cerfbotweb.vercel.com").strip().rstrip("/")
+    if not site_url.startswith("http"):
+        site_url = f"https://{site_url}"
     admin_link = f"{site_url}?token={token}#admin"
     
     text = (

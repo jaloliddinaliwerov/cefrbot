@@ -18,6 +18,9 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(text="🔥 Daily Challenge"), KeyboardButton(text="🎓 Mock Exam")]
     ]
     if web_app_url:
+        web_app_url = web_app_url.strip()
+        if not web_app_url.startswith("http"):
+            web_app_url = f"https://{web_app_url}"
         keyboard.append([KeyboardButton(text="📊 Web Dashboard", web_app=types.WebAppInfo(url=web_app_url))])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
