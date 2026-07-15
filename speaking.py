@@ -48,7 +48,45 @@ async def select_speaking_part(callback: types.CallbackQuery, state: FSMContext)
             await callback.answer(f"Hozircha Part {part} uchun speaking topshiriqlari mavjud emas.", show_alert=True)
             return
 
-        task = tasks[0]
+        markup = []
+        for task in tasks:
+            markup.append([InlineKeyboardButton(
+                text=f"{task.title} ({task.level})",
+                callback_data=f"speaking_task:{task.id}:{part}"
+            )])
+        markup.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="speaking_back_parts")])
+        
+        await callback.message.delete()
+        await callback.message.answer(
+            f"🗣️ **Speaking - Part {part}**\n\nIshlash uchun topshiriqni tanlang:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=markup),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+
+@router.callback_query(F.data == "speaking_back_parts")
+async def back_to_speaking_parts_cb(callback: types.CallbackQuery):
+    await callback.message.delete()
+    await callback.message.answer(
+        "🗣️ **Speaking bo'limi**\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
+        reply_markup=get_speaking_parts_keyboard()
+    )
+
+@router.callback_query(F.data.startswith("speaking_task:"))
+async def start_speaking_task(callback: types.CallbackQuery, state: FSMContext):
+    _, task_id_str, part_str = callback.data.split(":")
+    task_id = int(task_id_str)
+    part = int(part_str)
+    
+    async with DBContext() as session:
+        stmt = select(SpeakingTask).where(SpeakingTask.id == task_id)
+        res = await session.execute(stmt)
+        task = res.scalar_one_or_none()
+        
+        if not task:
+            await callback.answer("Topshiriq topilmadi.", show_alert=True)
+            return
+
         await state.set_state(SpeakingState.submitting)
         await state.update_data(task_id=task.id, prompt=task.prompt, part=part, task_title=task.title, task_level=task.level)
 

@@ -48,7 +48,6 @@ async def select_reading_part(callback: types.CallbackQuery, state: FSMContext):
     part = int(callback.data.split(":")[1])
     
     async with DBContext() as session:
-        # Find a question for this part
         stmt = select(Question).where(
             Question.section == "reading",
             Question.part == part,
@@ -61,9 +60,45 @@ async def select_reading_part(callback: types.CallbackQuery, state: FSMContext):
             await callback.answer("Hozircha bu Part uchun testlar mavjud emas.", show_alert=True)
             return
 
-        # Choose the first one (or randomly, let's pick first)
-        question = questions[0]
+        markup = []
+        for q in questions:
+            markup.append([InlineKeyboardButton(
+                text=f"{q.title}",
+                callback_data=f"reading_test:{q.id}:{part}"
+            )])
+        markup.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="reading_back_parts")])
         
+        await callback.message.delete()
+        await callback.message.answer(
+            f"📖 **Reading - Part {part}**\n\nIshlash uchun testni tanlang:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=markup),
+            parse_mode="Markdown"
+        )
+        await callback.answer()
+
+@router.callback_query(F.data == "reading_back_parts")
+async def back_to_reading_parts_cb(callback: types.CallbackQuery):
+    await callback.message.delete()
+    await callback.message.answer(
+        "📖 **Reading bo'limi**\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
+        reply_markup=get_parts_keyboard()
+    )
+
+@router.callback_query(F.data.startswith("reading_test:"))
+async def start_reading_test_cb(callback: types.CallbackQuery, state: FSMContext):
+    _, q_id_str, part_str = callback.data.split(":")
+    q_id = int(q_id_str)
+    part = int(part_str)
+    
+    async with DBContext() as session:
+        stmt = select(Question).where(Question.id == q_id)
+        res = await session.execute(stmt)
+        question = res.scalar_one_or_none()
+        
+        if not question:
+            await callback.answer("Test topilmadi.", show_alert=True)
+            return
+            
         await start_reading_test(callback.message, question, part, state)
         await callback.answer()
 
@@ -75,26 +110,56 @@ async def start_reading_test(message: types.Message, question: Question, part: i
     # Format question text
     q_text = f"📖 **Reading - Part {part}**\n\n"
     q_text += f"📌 **{question.title}**\n\n"
-    q_text += f"{question.text}\n\n"
+    if question.text:
+        q_text += f"{question.text}\n\n"
     q_text += "📝 **Savollar:**\n"
+    
+    has_options = any(len(q_item.get('options', [])) > 0 for q_item in question.questions_json)
     
     for idx, q_item in enumerate(question.questions_json, 1):
         q_text += f"\n**{idx}. {q_item['q']}**\n"
         for opt in q_item.get('options', []):
             q_text += f"   {opt}\n"
             
-    q_text += (
-        "\n✍️ **Javoblaringizni bitta xabar shaklida yuboring.**\n"
-        "Masalan: `1-A, 2-C, 3-B` (Harflar kattaligi muhim emas)"
-    )
+    if has_options:
+        q_text += (
+            "\n✍️ **Javoblaringizni bitta xabar shaklida yuboring.**\n"
+            "Masalan: `1-A, 2-C, 3-B` (Harflar kattaligi muhim emas)"
+        )
+    else:
+        q_text += (
+            "\n✍️ **Javoblaringizni har bir savol tartib raqami bilan yozib yuboring.**\n"
+            "Masalan:\n"
+            "1. Apple\n"
+            "2. Orange\n"
+            "3. Banana\n"
+            "(Harflar kattaligi va ortiqcha bo'shliqlar hisobga olinmaydi)"
+        )
     
     await message.answer(q_text, parse_mode="Markdown")
 
 def parse_user_answers(text: str) -> dict:
-    # Pattern to match: 1-A or 1:A or 1.A or 1 A
-    pattern = re.compile(r"(\d+)[\s\-:.]*([A-Da-d])")
-    matches = pattern.findall(text)
-    return {int(q_num): ans.upper() for q_num, ans in matches}
+    answers = {}
+    parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', text.strip())
+    
+    if len(parts) <= 1:
+        pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
+        matches = pattern.findall(text)
+        return {int(q_num): ans.strip() for q_num, ans in matches}
+
+    i = 1
+    while i < len(parts):
+        try:
+            q_num = int(parts[i])
+            ans_val = parts[i+1].strip()
+            ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
+            ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
+            answers[q_num] = ans_val
+        except (ValueError, IndexError):
+            pass
+        i += 2
+        
+    return answers
 
 @router.message(ReadingState.answering, F.text)
 async def process_reading_answers(message: types.Message, state: FSMContext):
@@ -107,7 +172,8 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
     if not user_answers:
         await message.answer(
             "⚠️ Javobingiz formati noto'g'ri. Iltimos quyidagi formatda yuboring:\n"
-            "Masalan: `1-A, 2-C, 3-B`"
+            "Masalan: `1-A, 2-C, 3-B` yoki\n"
+            "1. Apple\n2. Orange"
         )
         return
 
@@ -131,19 +197,30 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
         result_details = []
         
         for idx, q_item in enumerate(questions_list, 1):
-            correct_ans = q_item["answer"].upper().strip()
-            # If option has prefixes like "A: Option text", extract "A"
-            if len(correct_ans) > 1 and ":" in correct_ans:
-                correct_ans = correct_ans.split(":")[0].strip()
-                
-            user_ans = user_answers.get(idx, "").upper().strip()
+            correct_ans = q_item["answer"].strip()
+            has_opts = len(q_item.get('options', [])) > 0
             
-            if user_ans == correct_ans:
+            user_ans = user_answers.get(idx, "").strip()
+            
+            if has_opts:
+                if len(correct_ans) > 1 and ":" in correct_ans:
+                    correct_ans = correct_ans.split(":")[0].strip()
+                if len(user_ans) > 1 and ":" in user_ans:
+                    user_ans = user_ans.split(":")[0].strip()
+                
+                is_correct = (user_ans.upper() == correct_ans.upper())
+            else:
+                def clean_str(s):
+                    return re.sub(r'[^\w\s]', '', s.lower().strip())
+                is_correct = (clean_str(user_ans) == clean_str(correct_ans))
+                
+            if is_correct:
                 correct_count += 1
                 result_details.append(f"✅ {idx}-savol: To'g'ri")
             else:
                 wrong_answers[idx] = user_ans
-                result_details.append(f"❌ {idx}-savol: Noto'g'ri (Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {correct_ans})")
+                show_correct = correct_ans.split(":")[0] if has_opts else correct_ans
+                result_details.append(f"❌ {idx}-savol: Noto'g'ri (Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {show_correct})")
 
         # Score calculations
         percentage = (correct_count / total_questions) * 100
