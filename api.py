@@ -434,7 +434,7 @@ async def admin_get_speaking_submissions(admin: str = Depends(get_current_admin)
                 "voice_file_id": sub.voice_file_id,
                 "transcription": sub.transcription,
                 "score": sub.score,
-                "submitted_at": sub.submitted_at.strftime("%Y-%m-%d %H:%M")
+                "submitted_at": sub.submitted_at.strftime("%Y-%m-%d %H:%M") if sub.submitted_at else ""
             } for sub, u, task in rows
         ]
 
