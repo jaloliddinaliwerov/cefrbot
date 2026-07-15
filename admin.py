@@ -55,17 +55,25 @@ async def admin_cmd(message: types.Message):
     
     text = (
         "👑 **Admin Panelga Xush Kelibsiz!**\n\n"
-        "Siz quyidagi tugma orqali Web Admin Panelga kirishingiz mumkin. "
-        "U yerda yangi darslar, Reading/Listening matnlari, audio fayllar, "
-        "Writing/Speaking topshiriqlari va Mock Examlar qo'sha olasiz.\n\n"
+        "Siz quyidagi tugma orqali Web Admin Panelga kirishingiz mumkin.\n\n"
         "🔗 **Havola:**"
     )
     
     markup = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", web_app=types.WebAppInfo(url=admin_link))]
+        [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", web_app=types.WebAppInfo(url=admin_link))],
+        [types.InlineKeyboardButton(text="🌐 Brauzerda ochish", url=admin_link)]
     ])
     
     await message.answer(text, reply_markup=markup, parse_mode="Markdown")
+    
+    # Send token separately so admin can manually paste if WebApp URL fails
+    await message.answer(
+        f"🔑 **Xavfsizlik Tokeni** (panel ochilmasa, quyidagini nusxalab kiriting):\n\n"
+        f"`{token}`\n\n"
+        f"🖥️ **Backend API URL:**\n"
+        f"`{backend_url}`",
+        parse_mode="Markdown"
+    )
 
 @router.message(Command("addtest"))
 async def addtest_cmd(message: types.Message):
@@ -96,6 +104,7 @@ async def addtest_cmd(message: types.Message):
         "💡 *Listening uchun \"text\" o'rniga \"audio_url\" kiritiladi. Faylni tayyorlab botga hujjat (document) ko'rinishida yuboring.*"
     )
     await message.answer(help_msg, parse_mode="Markdown")
+
 
 import json
 
