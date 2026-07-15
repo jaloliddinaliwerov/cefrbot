@@ -452,11 +452,12 @@ async def get_voice_file(file_id: str, token: str = Query(...)):
             file_path = res.json()["result"]["file_path"]
             download_url = f"https://api.telegram.org/file/bot{bot_token}/{file_path}"
             
-            async def stream_audio():
-                async with client.stream("GET", download_url) as stream_res:
+        async def stream_audio():
+            async with httpx.AsyncClient() as stream_client:
+                async with stream_client.stream("GET", download_url) as stream_res:
                     async for chunk in stream_res.iter_bytes():
                         yield chunk
-            return StreamingResponse(stream_audio(), media_type="audio/ogg")
+        return StreamingResponse(stream_audio(), media_type="audio/ogg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
