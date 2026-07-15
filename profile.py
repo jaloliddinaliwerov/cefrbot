@@ -141,16 +141,25 @@ async def daily_challenge_menu(message: types.Message, state: FSMContext):
     day_of_year = datetime.datetime.now().timetuple().tm_yday
     
     async with DBContext() as session:
-        count_stmt = select(func.count(Question.id)).where(Question.is_mock == False)
+        # Try to find questions explicitly marked as Daily Challenge
+        count_stmt = select(func.count(Question.id)).where(Question.is_daily == True)
         res = await session.execute(count_stmt)
         total_questions = res.scalar() or 0
         
-        if total_questions == 0:
-            await message.answer("⚠️ Hozircha Daily Challenge mavjud emas.")
-            return
-            
-        target_idx = day_of_year % total_questions
-        stmt = select(Question).where(Question.is_mock == False).offset(target_idx).limit(1)
+        if total_questions > 0:
+            target_idx = day_of_year % total_questions
+            stmt = select(Question).where(Question.is_daily == True).offset(target_idx).limit(1)
+        else:
+            # Fallback to any non-mock practice question
+            count_stmt = select(func.count(Question.id)).where(Question.is_mock == False)
+            res = await session.execute(count_stmt)
+            total_questions = res.scalar() or 0
+            if total_questions == 0:
+                await message.answer("⚠️ Hozircha Daily Challenge mavjud emas.")
+                return
+            target_idx = day_of_year % total_questions
+            stmt = select(Question).where(Question.is_mock == False).offset(target_idx).limit(1)
+
         res = await session.execute(stmt)
         question = res.scalar_one_or_none()
         

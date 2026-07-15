@@ -59,6 +59,7 @@ class Question(Base):
     audio_url = Column(String(500), nullable=True)  # Listening audio link or file_id
     questions_json = Column(JSON)  # List of dicts: [{"id": 1, "q": "Question Text", "options": ["A", "B", "C", "D"], "answer": "A"}]
     is_mock = Column(Boolean, default=False)
+    is_daily = Column(Boolean, default=False)
 
 class UserProgress(Base):
     __tablename__ = "user_progress"
@@ -208,6 +209,15 @@ async def init_db():
                 await session.commit()
             except Exception:
                 await session.rollback()
+
+    # Auto-migrate is_daily to questions
+    async with async_session() as session:
+        try:
+            from sqlalchemy import text
+            await session.execute(text("ALTER TABLE questions ADD COLUMN is_daily BOOLEAN DEFAULT FALSE;"))
+            await session.commit()
+        except Exception:
+            await session.rollback()
             
     # Insert default achievements
     async with async_session() as session:
