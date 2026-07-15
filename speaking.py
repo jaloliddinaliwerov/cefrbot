@@ -139,7 +139,10 @@ async def process_speaking_submission(message: types.Message, state: FSMContext,
             submission_id = submission.id
 
         # Notify user — waiting for admin
-        await loading_msg.delete()
+        try:
+            await loading_msg.delete()
+        except Exception:
+            pass
         await state.clear()
 
         await message.answer(
@@ -193,7 +196,10 @@ async def process_speaking_submission(message: types.Message, state: FSMContext,
 
 
     except Exception as e:
-        await loading_msg.delete()
+        try:
+            await loading_msg.delete()
+        except Exception:
+            pass
         await message.answer(f"❌ Ovozli faylni qayta ishlashda xatolik yuz berdi: {e}")
     finally:
         if os.path.exists(voice_path):
