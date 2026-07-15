@@ -71,6 +71,15 @@ async def admin_cmd(message: types.Message):
     ])
     
     await message.answer(text, reply_markup=markup, parse_mode="Markdown")
+    
+    # Send token separately so admin can manually paste if WebApp URL fails
+    await message.answer(
+        f"🔑 **Xavfsizlik Tokeni** (panel ochilmasa, quyidagini nusxalab kiriting):\n\n"
+        f"`{token}`\n\n"
+        f"🖥️ **Backend API URL:**\n"
+        f"`{backend_url}`",
+        parse_mode="Markdown"
+    )
 
 @router.callback_query(F.data == "admin_view_speakings")
 async def admin_view_speakings_handler(callback: types.CallbackQuery, bot: Bot):
@@ -98,10 +107,10 @@ async def admin_view_speakings_handler(callback: types.CallbackQuery, bot: Bot):
 
     for sub, u, task in rows:
         admin_caption = (
-            f"🎙️ **Speaking topshirig'i!**\n\n"
-            f"👤 **O'quvchi:** {u.first_name or 'Foydalanuvchi'} (@{u.username or ''} | ID: {u.id})\n"
-            f"📌 **Topshiriq:** {task.title} (Part {task.part} — {task.level})\n\n"
-            f"📋 **Transkripsiya:**\n_{sub.transcription or 'Mavjud emas'}_\n\n"
+            f"🎙️ <b>Speaking topshirig'i!</b>\n\n"
+            f"👤 <b>O'quvchi:</b> {u.first_name or 'Foydalanuvchi'} ({f'@{u.username}' if u.username else 'Username yo`q'} | ID: {u.id})\n"
+            f"📌 <b>Topshiriq:</b> {task.title} (Part {task.part} — {task.level})\n\n"
+            f"📋 <b>Transkripsiya:</b>\n<i>{sub.transcription or 'Mavjud emas'}</i>\n\n"
             f"⬇️ Ovozni eshitib, baho qo'ying:"
         )
         grade_btn = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -115,7 +124,7 @@ async def admin_view_speakings_handler(callback: types.CallbackQuery, bot: Bot):
                 chat_id=callback.from_user.id,
                 voice=sub.voice_file_id,
                 caption=admin_caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=grade_btn
             )
         except Exception as e:
@@ -152,10 +161,10 @@ async def admin_view_payments_handler(callback: types.CallbackQuery, bot: Bot):
         price_str = f"{price_val:,}"
         
         caption = (
-            f"💳 **Kutilayotgan to'lov!**\n\n"
-            f"👤 **O'quvchi:** {u.first_name or 'Foydalanuvchi'} (@{u.username or ''} | ID: {u.id})\n"
-            f"🎓 **Sotib olinayotgan Mock:** {mock.title}\n"
-            f"💰 **Narxi:** {price_str} UZS\n"
+            f"💳 <b>Kutilayotgan to'lov!</b>\n\n"
+            f"👤 <b>O'quvchi:</b> {u.first_name or 'Foydalanuvchi'} ({f'@{u.username}' if u.username else 'Username yo`q'} | ID: {u.id})\n"
+            f"🎓 <b>Sotib olinayotgan Mock:</b> {mock.title}\n"
+            f"💰 <b>Narxi:</b> {price_str} UZS\n"
             f"🆔 Purchase ID: #{purchase.id}\n\n"
             f"To'lov chekini tekshiring va qaror qiling:"
         )
@@ -170,22 +179,13 @@ async def admin_view_payments_handler(callback: types.CallbackQuery, bot: Bot):
                 chat_id=callback.from_user.id,
                 photo=purchase.screenshot_file_id,
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=approve_kb
             )
         except Exception as e:
             await callback.message.answer(f"❌ Chek rasmini yuborishda xatolik: {e}")
 
     await callback.answer()
-    
-    # Send token separately so admin can manually paste if WebApp URL fails
-    await message.answer(
-        f"🔑 **Xavfsizlik Tokeni** (panel ochilmasa, quyidagini nusxalab kiriting):\n\n"
-        f"`{token}`\n\n"
-        f"🖥️ **Backend API URL:**\n"
-        f"`{backend_url}`",
-        parse_mode="Markdown"
-    )
 
 @router.message(Command("addtest"))
 async def addtest_cmd(message: types.Message):

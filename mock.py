@@ -217,13 +217,12 @@ async def receive_payment_screenshot(message: types.Message, state: FSMContext, 
     admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
 
     user_name = message.from_user.full_name or "Foydalanuvchi"
-    username = f"@{message.from_user.username}" if message.from_user.username else f"ID: {user_id}"
-
+    username_str = f"@{message.from_user.username}" if message.from_user.username else "Username yo'q"
     price_val = mock_price if mock_price is not None else 0
     caption = (
-        f"💳 **Yangi to'lov so'rovi!**\n\n"
-        f"👤 {user_name} ({username})\n"
-        f"🎓 Mock: **{mock_title}**\n"
+        f"💳 <b>Yangi to'lov so'rovi!</b>\n\n"
+        f"👤 {user_name} ({username_str} | ID: {user_id})\n"
+        f"🎓 Mock: <b>{mock_title}</b>\n"
         f"💰 Narxi: {price_val:,} UZS\n"
         f"🆔 Purchase ID: #{purchase_id}\n\n"
         f"To'lov chekini tekshiring va qaror qiling:"
@@ -241,7 +240,7 @@ async def receive_payment_screenshot(message: types.Message, state: FSMContext, 
                 chat_id=admin_id,
                 photo=file_id,
                 caption=caption,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 reply_markup=approve_kb
             )
         except Exception:
