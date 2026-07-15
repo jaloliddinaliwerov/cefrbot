@@ -239,3 +239,121 @@ async def evaluate_speaking(audio_file_path: str, prompt: str) -> Dict[str, Any]
             logger.error(f"OpenAI Speaking evaluation failed: {e}")
 
     return default_feedback
+
+async def transcribe_speaking(audio_file_path: str, prompt: str) -> str:
+    """
+    Only transcribes the student's speaking audio — does NOT score.
+    Returns the transcription text string.
+    Admin will manually grade.
+    """
+    # 1. Try Gemini
+    if GEMINI_KEY and os.path.exists(audio_file_path):
+        try:
+            import base64
+            with open(audio_file_path, "rb") as f:
+                audio_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+            user_prompt = (
+                f'You are a professional speech transcriber. '
+                f'The audio contains a student\'s spoken English response to this prompt: "{prompt}". '
+                f'Please transcribe the speech accurately. '
+                f'Return ONLY the transcription text, nothing else — no JSON, no labels, no explanation.'
+            )
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"inlineData": {"mimeType": "audio/ogg", "data": audio_b64}},
+                        {"text": user_prompt}
+                    ]
+                }]
+            }
+            async with httpx.AsyncClient() as client:
+                res = await client.post(url, json=payload, timeout=60.0)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data['candidates'][0]['content']['parts'][0]['text'].strip()
+        except Exception as e:
+            logger.error(f"Gemini transcription failed: {e}")
+
+    # 2. Try OpenAI Whisper
+    if OPENAI_KEY and os.path.exists(audio_file_path):
+        try:
+            headers = {"Authorization": f"Bearer {OPENAI_KEY}"}
+            with open(audio_file_path, "rb") as audio_file:
+                files = {
+                    "file": (os.path.basename(audio_file_path), audio_file, "audio/ogg"),
+                    "model": (None, "whisper-1")
+                }
+                async with httpx.AsyncClient() as client:
+                    res = await client.post(
+                        "https://api.openai.com/v1/audio/transcriptions",
+                        headers=headers, files=files, timeout=30.0
+                    )
+                    if res.status_code == 200:
+                        return res.json().get("text", "")
+        except Exception as e:
+            logger.error(f"Whisper transcription failed: {e}")
+
+    return "(Transkripsiya mavjud emas — API kaliti sozlanmagan)"
+
+async def parse_pdf_to_test(pdf_file_path: str) -> Dict[str, Any]:
+    """
+    Parses questions, passage, options, and answers from a PDF file using Gemini 1.5.
+    Returns: Dict containing section, part, title, text, and questions list.
+    """
+    if not GEMINI_KEY:
+        raise ValueError("Gemini API Key is not set in environment variables.")
+
+    if not os.path.exists(pdf_file_path):
+        raise FileNotFoundError(f"PDF file not found at {pdf_file_path}")
+
+    import base64
+    with open(pdf_file_path, "rb") as f:
+        pdf_b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    
+    prompt = (
+        "Extract all questions, the reading passage (if any), the test section, the CEFR part, and the correct answers from this PDF document.\n\n"
+        "You must return a valid JSON object in EXACTLY the following format:\n"
+        "{\n"
+        "  \"section\": \"reading\" | \"listening\",\n"
+        "  \"part\": <integer between 1 and 5>,\n"
+        "  \"title\": \"Title of the passage or test\",\n"
+        "  \"text\": \"The complete reading passage text (only if section is reading, otherwise null)\",\n"
+        "  \"questions\": [\n"
+        "    {\n"
+        "      \"q\": \"The question text\",\n"
+        "      \"options\": [\"Option A text\", \"Option B text\", \"Option C text\", \"Option D text\"],\n"
+        "      \"answer\": \"A\" | \"B\" | \"C\" | \"D\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n\n"
+        "Instructions:\n"
+        "1. Identify the section ('reading' or 'listening') and part (1-5).\n"
+        "2. Extract the passage text into the 'text' field (make sure to capture all paragraphs exactly).\n"
+        "3. For the questions, the options array must contain simple text choices without 'A: ', 'B: ' prefixes.\n"
+        "4. Determine the correct 'answer' key (A, B, C, or D) based on the test answers key (usually at the end of the PDF, or solve them yourself accurately).\n"
+        "5. Output must be a valid JSON matching this schema. Do not wrap in markdown ```json."
+    )
+
+    payload = {
+        "contents": [{
+            "parts": [
+                {"inlineData": {"mimeType": "application/pdf", "data": pdf_b64}},
+                {"text": prompt}
+            ]
+        }],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    }
+
+    async with httpx.AsyncClient() as client:
+        res = await client.post(url, json=payload, timeout=60.0)
+        if res.status_code == 200:
+            return json.loads(res.json()['candidates'][0]['content']['parts'][0]['text'].strip())
+        else:
+            raise Exception(f"Gemini API returned status code {res.status_code}: {res.text}")
+

@@ -109,35 +109,46 @@ async def addtest_cmd(message: types.Message):
 import json
 
 @router.message(F.document)
-async def handle_json_test_upload(message: types.Message, bot: Bot):
+async def handle_document_test_upload(message: types.Message, bot: Bot):
     user_id_str = str(message.from_user.id)
     admin_ids = os.getenv("ADMIN_IDS", "").split(",")
     if user_id_str not in admin_ids:
         return
         
-    if not message.document.file_name.endswith(".json"):
+    filename = message.document.file_name.lower()
+    if not (filename.endswith(".json") or filename.endswith(".pdf")):
         return
         
-    status_msg = await message.answer("⌛️ **Fayl tekshirilmoqda va bazaga yuklanmoqda...**")
-    temp_file = f"temp_upload_{message.from_user.id}.json"
+    is_pdf = filename.endswith(".pdf")
+    status_msg = await message.answer(
+        "⌛️ **AI orqali PDF fayl o'qilmoqda, savollar, javoblar kaliti va matnlar ajratib olinmoqda (bu 10-15 soniya olishi mumkin)...**" if is_pdf
+        else "⌛️ **JSON fayl tekshirilmoqda va yuklanmoqda...**"
+    )
+    
+    ext = ".pdf" if is_pdf else ".json"
+    temp_file = f"temp_upload_{message.from_user.id}{ext}"
     
     try:
         file_info = await bot.get_file(message.document.file_id)
         await bot.download_file(file_info.file_path, temp_file)
         
-        with open(temp_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            
+        if is_pdf:
+            from ai_service import parse_pdf_to_test
+            data = await parse_pdf_to_test(temp_file)
+        else:
+            with open(temp_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
         if os.path.exists(temp_file):
             os.remove(temp_file)
-        
+            
         section = data.get("section")
         part = data.get("part")
         title = data.get("title")
         questions_raw = data.get("questions", [])
         
         if not section or not part or not title or not questions_raw:
-            await status_msg.edit_text("❌ **Xatolik:** JSON faylda `section`, `part`, `title` va `questions` maydonlari bo'lishi shart!")
+            await status_msg.edit_text("❌ **Xatolik:** Faylda `section`, `part`, `title` va `questions` maydonlari bo'lishi shart!")
             return
             
         questions_json = []
@@ -172,7 +183,8 @@ async def handle_json_test_upload(message: types.Message, bot: Bot):
                 text=data.get("text"),
                 audio_url=data.get("audio_url"),
                 questions_json=questions_json,
-                is_mock=False
+                is_mock=False,
+                is_daily=False
             )
             session.add(new_q)
             await session.commit()
@@ -181,5 +193,9 @@ async def handle_json_test_upload(message: types.Message, bot: Bot):
         
     except Exception as e:
         if os.path.exists(temp_file):
-            os.remove(temp_file)
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
         await status_msg.edit_text(f"❌ **Faylni tahlil qilishda xatolik:**\n`{str(e)}`")
+
