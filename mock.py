@@ -219,11 +219,12 @@ async def receive_payment_screenshot(message: types.Message, state: FSMContext, 
     user_name = message.from_user.full_name or "Foydalanuvchi"
     username = f"@{message.from_user.username}" if message.from_user.username else f"ID: {user_id}"
 
+    price_val = mock_price if mock_price is not None else 0
     caption = (
         f"💳 **Yangi to'lov so'rovi!**\n\n"
         f"👤 {user_name} ({username})\n"
         f"🎓 Mock: **{mock_title}**\n"
-        f"💰 Narxi: {mock_price:,} UZS\n"
+        f"💰 Narxi: {price_val:,} UZS\n"
         f"🆔 Purchase ID: #{purchase_id}\n\n"
         f"To'lov chekini tekshiring va qaror qiling:"
     )

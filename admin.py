@@ -2,7 +2,8 @@ import os
 import hashlib
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
-from database import DBContext
+from database import DBContext, MockPurchase, SpeakingSubmission, User, MockExam, SpeakingTask
+from sqlalchemy import select
 
 router = Router()
 
@@ -55,16 +56,127 @@ async def admin_cmd(message: types.Message):
     
     text = (
         "👑 **Admin Panelga Xush Kelibsiz!**\n\n"
-        "Siz quyidagi tugma orqali Web Admin Panelga kirishingiz mumkin.\n\n"
-        "🔗 **Havola:**"
+        "Quyidagi tugmalar orqali bot ichida boshqarishingiz mumkin:\n\n"
+        "🎙️ **Speaking javoblari** — Baholanmagan speaking topshiriqlarini tekshirish.\n"
+        "💳 **Kutilayotgan to'lovlar** — Mock testlar uchun to'lov cheklarini tekshirish."
     )
     
     markup = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="🎙️ Speaking javoblari", callback_data="admin_view_speakings"),
+            types.InlineKeyboardButton(text="💳 Kutilayotgan to'lovlar", callback_data="admin_view_payments")
+        ],
         [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", web_app=types.WebAppInfo(url=admin_link))],
         [types.InlineKeyboardButton(text="🌐 Brauzerda ochish", url=admin_link)]
     ])
     
     await message.answer(text, reply_markup=markup, parse_mode="Markdown")
+
+@router.callback_query(F.data == "admin_view_speakings")
+async def admin_view_speakings_handler(callback: types.CallbackQuery, bot: Bot):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+
+    async with DBContext() as session:
+        stmt = select(SpeakingSubmission, User, SpeakingTask).join(
+            User, SpeakingSubmission.user_id == User.id
+        ).join(
+            SpeakingTask, SpeakingSubmission.task_id == SpeakingTask.id
+        ).where(SpeakingSubmission.admin_graded == False).order_by(SpeakingSubmission.submitted_at.asc())
+        res = await session.execute(stmt)
+        rows = res.all()
+
+    if not rows:
+        await callback.message.answer("🎉 Hozirda baholanmagan speaking topshiriqlari mavjud emas!")
+        await callback.answer()
+        return
+
+    await callback.message.answer(f"🎙️ **Jami {len(rows)} ta baholanmagan speaking topshiriqlari topildi. Quyida ular keltirilgan:**")
+
+    for sub, u, task in rows:
+        admin_caption = (
+            f"🎙️ **Speaking topshirig'i!**\n\n"
+            f"👤 **O'quvchi:** {u.first_name or 'Foydalanuvchi'} (@{u.username or ''} | ID: {u.id})\n"
+            f"📌 **Topshiriq:** {task.title} (Part {task.part} — {task.level})\n\n"
+            f"📋 **Transkripsiya:**\n_{sub.transcription or 'Mavjud emas'}_\n\n"
+            f"⬇️ Ovozni eshitib, baho qo'ying:"
+        )
+        grade_btn = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(
+                text=f"📝 Baho qo'yish (#{sub.id})",
+                callback_data=f"admin_grade_speaking:{sub.id}:{u.id}"
+            )]
+        ])
+        try:
+            await bot.send_voice(
+                chat_id=callback.from_user.id,
+                voice=sub.voice_file_id,
+                caption=admin_caption,
+                parse_mode="Markdown",
+                reply_markup=grade_btn
+            )
+        except Exception as e:
+            await callback.message.answer(f"❌ Ovozli xabarni yuborishda xatolik: {e}")
+
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_view_payments")
+async def admin_view_payments_handler(callback: types.CallbackQuery, bot: Bot):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+
+    async with DBContext() as session:
+        stmt = select(MockPurchase, User, MockExam).join(
+            User, MockPurchase.user_id == User.id
+        ).join(
+            MockExam, MockPurchase.mock_id == MockExam.id
+        ).where(MockPurchase.status == "pending").order_by(MockPurchase.purchased_at.asc())
+        res = await session.execute(stmt)
+        rows = res.all()
+
+    if not rows:
+        await callback.message.answer("🎉 Hozirda kutilayotgan to'lov cheklari mavjud emas!")
+        await callback.answer()
+        return
+
+    await callback.message.answer(f"💳 **Jami {len(rows)} ta kutilayotgan to'lov topildi. Quyida ularning cheklari keltirilgan:**")
+
+    for purchase, u, mock in rows:
+        price_val = mock.price if mock.price is not None else 0
+        price_str = f"{price_val:,}"
+        
+        caption = (
+            f"💳 **Kutilayotgan to'lov!**\n\n"
+            f"👤 **O'quvchi:** {u.first_name or 'Foydalanuvchi'} (@{u.username or ''} | ID: {u.id})\n"
+            f"🎓 **Sotib olinayotgan Mock:** {mock.title}\n"
+            f"💰 **Narxi:** {price_str} UZS\n"
+            f"🆔 Purchase ID: #{purchase.id}\n\n"
+            f"To'lov chekini tekshiring va qaror qiling:"
+        )
+        approve_kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"mock_approve:{purchase.id}:{u.id}"),
+                types.InlineKeyboardButton(text="❌ Rad etish", callback_data=f"mock_reject:{purchase.id}:{u.id}")
+            ]
+        ])
+        try:
+            await bot.send_photo(
+                chat_id=callback.from_user.id,
+                photo=purchase.screenshot_file_id,
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=approve_kb
+            )
+        except Exception as e:
+            await callback.message.answer(f"❌ Chek rasmini yuborishda xatolik: {e}")
+
+    await callback.answer()
     
     # Send token separately so admin can manually paste if WebApp URL fails
     await message.answer(
