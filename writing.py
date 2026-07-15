@@ -135,7 +135,10 @@ async def process_writing_submission(message: types.Message, state: FSMContext):
     report += f"\n💡 **Maslahat va Tavsiyalar:**\n{feedback.get('advice', '')}\n"
 
     # Delete loading message and send report
-    await loading_msg.delete()
+    try:
+        await loading_msg.delete()
+    except Exception:
+        pass
     await state.clear()
     
     markup = InlineKeyboardMarkup(inline_keyboard=[
