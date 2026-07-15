@@ -188,7 +188,7 @@ async def init_db():
         for col_sql in [
             "ALTER TABLE speaking_submissions ADD COLUMN admin_graded BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE speaking_submissions ADD COLUMN admin_feedback TEXT;",
-            "ALTER TABLE speaking_submissions ADD COLUMN submitted_at DATETIME;",
+            "ALTER TABLE speaking_submissions ADD COLUMN submitted_at TIMESTAMP;",
         ]:
             try:
                 from sqlalchemy import text
