@@ -117,9 +117,12 @@ class SpeakingSubmission(Base):
     task_id = Column(Integer, ForeignKey("speaking_tasks.id"))
     voice_file_id = Column(String(255))
     transcription = Column(Text, nullable=True)
-    feedback_json = Column(JSON)  # {"grammar": "", "pronunciation": "", "fluency": "", "vocab": "", "level": "B2", "score": 80}
-    score = Column(Integer)
-    evaluated_at = Column(DateTime, default=datetime.datetime.utcnow)
+    feedback_json = Column(JSON, nullable=True)
+    score = Column(Integer, nullable=True)      # Admin tomonidan qo'yiladi
+    admin_graded = Column(Boolean, default=False)  # Admin baho qo'ydimi?
+    admin_feedback = Column(Text, nullable=True)   # Admin izohi
+    submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
+    evaluated_at = Column(DateTime, nullable=True)
 
 class MockExam(Base):
     __tablename__ = "mock_exams"
@@ -138,7 +141,9 @@ class MockPurchase(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey("users.id"))
     mock_id = Column(Integer, ForeignKey("mock_exams.id"))
-    status = Column(String(50), default="completed")  # 'pending', 'completed'
+    status = Column(String(50), default="pending")  # 'pending', 'completed', 'rejected'
+    screenshot_file_id = Column(String(255), nullable=True)  # User's payment screenshot
+    reject_reason = Column(Text, nullable=True)             # Admin rejection reason
     purchased_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Achievement(Base):
@@ -156,6 +161,13 @@ class UserAchievement(Base):
     achievement_id = Column(String(50), ForeignKey("achievements.id"), primary_key=True)
     unlocked_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+class BotSettings(Base):
+    """Key-value store for bot configuration (card number, etc.)"""
+    __tablename__ = "bot_settings"
+    
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+
 # Database helper functions
 async def init_db():
     async with engine.begin() as conn:
@@ -169,6 +181,33 @@ async def init_db():
             await session.commit()
         except Exception:
             await session.rollback()
+
+    # Auto-migrate new speaking_submissions columns
+    async with async_session() as session:
+        for col_sql in [
+            "ALTER TABLE speaking_submissions ADD COLUMN admin_graded BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE speaking_submissions ADD COLUMN admin_feedback TEXT;",
+            "ALTER TABLE speaking_submissions ADD COLUMN submitted_at DATETIME;",
+        ]:
+            try:
+                from sqlalchemy import text
+                await session.execute(text(col_sql))
+                await session.commit()
+            except Exception:
+                await session.rollback()
+
+    # Auto-migrate new mock_purchases columns
+    async with async_session() as session:
+        for col_sql in [
+            "ALTER TABLE mock_purchases ADD COLUMN screenshot_file_id VARCHAR(255);",
+            "ALTER TABLE mock_purchases ADD COLUMN reject_reason TEXT;",
+        ]:
+            try:
+                from sqlalchemy import text
+                await session.execute(text(col_sql))
+                await session.commit()
+            except Exception:
+                await session.rollback()
             
     # Insert default achievements
     async with async_session() as session:

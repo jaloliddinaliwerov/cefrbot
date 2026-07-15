@@ -9,7 +9,7 @@ import os
 from database import (
     DBContext, User, Question, UserProgress, UserIncorrectQuestion,
     WritingTask, WritingSubmission, SpeakingTask, SpeakingSubmission,
-    MockExam, MockPurchase, Achievement, UserAchievement
+    MockExam, MockPurchase, Achievement, UserAchievement, BotSettings
 )
 from admin import verify_admin_token
 
@@ -456,6 +456,124 @@ async def get_voice_file(file_id: str, token: str = Query(...)):
             return StreamingResponse(stream_audio(), media_type="audio/ogg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Settings endpoints ───────────────────────────────────────────────
+
+class SettingUpdate(BaseModel):
+    value: str
+
+@app.get("/api/admin/settings")
+async def get_settings(admin: str = Depends(get_current_admin)):
+    """Get all bot settings (card number, etc.)"""
+    async with DBContext() as session:
+        res = await session.execute(select(BotSettings))
+        settings = res.scalars().all()
+        return {s.key: s.value for s in settings}
+
+@app.put("/api/admin/settings/{key}")
+async def update_setting(key: str, body: SettingUpdate, admin: str = Depends(get_current_admin)):
+    """Create or update a setting by key."""
+    async with DBContext() as session:
+        res = await session.execute(select(BotSettings).where(BotSettings.key == key))
+        setting = res.scalar_one_or_none()
+        if setting:
+            setting.value = body.value
+        else:
+            setting = BotSettings(key=key, value=body.value)
+            session.add(setting)
+        await session.commit()
+    return {"status": "success", "key": key, "value": body.value}
+
+# ─── Pending payments endpoints ───────────────────────────────────────
+
+@app.get("/api/admin/pending-payments")
+async def get_pending_payments(admin: str = Depends(get_current_admin)):
+    """Get all pending mock exam purchases."""
+    async with DBContext() as session:
+        stmt = select(MockPurchase, User, MockExam).join(
+            User, MockPurchase.user_id == User.id
+        ).join(
+            MockExam, MockPurchase.mock_id == MockExam.id
+        ).where(MockPurchase.status == "pending").order_by(MockPurchase.purchased_at.desc())
+        res = await session.execute(stmt)
+        rows = res.all()
+        return [
+            {
+                "id": p.id,
+                "user_id": p.user_id,
+                "user_name": u.first_name or "Foydalanuvchi",
+                "user_username": u.username,
+                "mock_title": m.title,
+                "mock_price": m.price,
+                "screenshot_file_id": p.screenshot_file_id,
+                "purchased_at": p.purchased_at.strftime("%Y-%m-%d %H:%M") if p.purchased_at else ""
+            } for p, u, m in rows
+        ]
+
+@app.post("/api/admin/approve-purchase/{purchase_id}/{user_id}")
+async def approve_purchase(purchase_id: int, user_id: int, admin: str = Depends(get_current_admin)):
+    """Approve a pending mock purchase and notify user via Telegram."""
+    import httpx
+    async with DBContext() as session:
+        p_stmt = select(MockPurchase).where(MockPurchase.id == purchase_id)
+        p_res = await session.execute(p_stmt)
+        purchase = p_res.scalar_one_or_none()
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Purchase not found")
+        if purchase.status == "completed":
+            return {"status": "already_completed"}
+
+        purchase.status = "completed"
+        m_stmt = select(MockExam).where(MockExam.id == purchase.mock_id)
+        m_res = await session.execute(m_stmt)
+        mock = m_res.scalar_one_or_none()
+        await session.commit()
+
+    mock_title = mock.title if mock else "Mock Exam"
+    bot_token = os.getenv("BOT_TOKEN", "")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={
+                    "chat_id": user_id,
+                    "text": f"🎉 *To'lovingiz tasdiqlandi!*\n\n🎓 *{mock_title}* mockiga kirish ruxsati berildi.\nEndi Mock Exam bo'limidan boshlashingiz mumkin! 🚀",
+                    "parse_mode": "Markdown"
+                }
+            )
+    except Exception:
+        pass
+    return {"status": "approved"}
+
+@app.post("/api/admin/reject-purchase/{purchase_id}/{user_id}")
+async def reject_purchase(purchase_id: int, user_id: int, admin: str = Depends(get_current_admin)):
+    """Reject a pending mock purchase and notify user via Telegram."""
+    import httpx
+    async with DBContext() as session:
+        p_stmt = select(MockPurchase).where(MockPurchase.id == purchase_id)
+        p_res = await session.execute(p_stmt)
+        purchase = p_res.scalar_one_or_none()
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Purchase not found")
+
+        purchase.status = "rejected"
+        purchase.reject_reason = "Admin tomonidan rad etildi"
+        await session.commit()
+
+    bot_token = os.getenv("BOT_TOKEN", "")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={
+                    "chat_id": user_id,
+                    "text": "❌ *To'lovingiz tasdiqlanmadi.*\n\nSabab: to'lov cheki noto'g'ri yoki miqdor mos kelmadi.\nQaytadan to'g'ri miqdorda o'tkazing va yangi chek yuboring.",
+                    "parse_mode": "Markdown"
+                }
+            )
+    except Exception:
+        pass
+    return {"status": "rejected"}
 
 # Serve frontend static assets if they exist (local testing / simple deployment)
 if os.path.exists("frontend"):

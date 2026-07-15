@@ -1,38 +1,26 @@
 import os
+import datetime
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, PreCheckoutQuery, Message
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 from sqlalchemy import select
-from database import DBContext, MockExam, MockPurchase, Question, WritingTask, SpeakingTask, User, UserAchievement, UserProgress
+from database import DBContext, MockExam, MockPurchase, Question, WritingTask, SpeakingTask, User, UserAchievement, UserProgress, BotSettings
 from states import MockState
 from ai_service import evaluate_writing, evaluate_speaking
 
 router = Router()
 
-# Handles Telegram Payments invoices pre-checkout query
-@router.pre_checkout_query()
-async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery):
-    await pre_checkout_query.answer(ok=True)
+class MockPaymentState(StatesGroup):
+    waiting_screenshot = State()  # User sends payment screenshot
 
-# Handles successful payment
-@router.message(F.successful_payment)
-async def process_successful_payment(message: Message):
-    payload = message.successful_payment.invoice_payload
-    mock_id = int(payload.split(":")[1])
-    
+async def get_card_number() -> str:
+    """Get card number from BotSettings table."""
     async with DBContext() as session:
-        purchase = MockPurchase(
-            user_id=message.from_user.id,
-            mock_id=mock_id,
-            status="completed"
-        )
-        session.add(purchase)
-        await session.commit()
-        
-    await message.answer(
-        "🎉 To'lovingiz muvaffaqiyatli qabul qilindi!\n"
-        "Mock imtihoni profilingizga qo'shildi. Uni topshirishni boshlashingiz mumkin."
-    )
+        res = await session.execute(select(BotSettings).where(BotSettings.key == "card_number"))
+        setting = res.scalar_one_or_none()
+        return setting.value if setting and setting.value else "Karta raqami sozlanmagan. Admin bilan bog'laning."
+
 
 @router.message(F.text == "🎓 Mock Exam")
 async def mock_exam_menu(message: types.Message):
@@ -108,12 +96,9 @@ async def view_mock_exam(callback: types.CallbackQuery):
     if purchased or mock.price == 0:
         markup.append([InlineKeyboardButton(text="▶️ Imtihonni Boshlash", callback_data=f"mock_start:{mock.id}")])
     else:
-        markup.append([
-            InlineKeyboardButton(text=f"💳 Sotib olish ({mock.price} UZS)", callback_data=f"mock_buy:{mock.id}"),
-            InlineKeyboardButton(text="🎁 Simulyatsiya to'lovi", callback_data=f"mock_buy_simulated:{mock.id}")
-        ])
-        
+        markup.append([InlineKeyboardButton(text=f"💳 Sotib olish ({mock.price:,} UZS)", callback_data=f"mock_buy:{mock.id}")])
     markup.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="mock_back_list")])
+
     
     details_text = (
         f"🎓 **{mock.title}**\n\n"
@@ -137,70 +122,236 @@ async def back_to_mock_list(callback: types.CallbackQuery):
     await mock_exam_menu(callback.message)
     await callback.answer()
 
-@router.callback_query(F.data.startswith("mock_buy_simulated:"))
-async def simulated_purchase(callback: types.CallbackQuery):
+# ─── Card Payment Flow ───────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("mock_buy:"))
+async def buy_mock_show_card(callback: types.CallbackQuery, state: FSMContext, bot: Bot):
+    """Show card number and ask user to send payment screenshot."""
     mock_id = int(callback.data.split(":")[1])
     user_id = callback.from_user.id
-    
+
     async with DBContext() as session:
-        # Check if already purchased
+        # Check existing pending/completed purchase
         p_stmt = select(MockPurchase).where(
             MockPurchase.user_id == user_id,
             MockPurchase.mock_id == mock_id,
-            MockPurchase.status == "completed"
+            MockPurchase.status.in_(["completed", "pending"])
         )
         p_res = await session.execute(p_stmt)
-        if p_res.scalar_one_or_none():
-            await callback.answer("Siz ushbu mock imtihonni sotib olgansiz.", show_alert=True)
+        existing = p_res.scalar_one_or_none()
+        if existing:
+            if existing.status == "completed":
+                await callback.answer("Siz ushbu mockni allaqachon sotib olgansiz!", show_alert=True)
+            else:
+                await callback.answer("Sizning to'lovingiz hali admin tomonidan tasdiqlanmagan. Kuting.", show_alert=True)
             return
-            
-        purchase = MockPurchase(
-            user_id=user_id,
-            mock_id=mock_id,
-            status="completed"
-        )
-        session.add(purchase)
-        await session.commit()
-        
-    await callback.answer("To'lov muvaffaqiyatli yakunlandi! (Simulyatsiya)", show_alert=True)
-    await callback.message.delete()
-    await mock_exam_menu(callback.message)
 
-@router.callback_query(F.data.startswith("mock_buy:"))
-async def buy_mock_exam_invoice(callback: types.CallbackQuery, bot: Bot):
-    mock_id = int(callback.data.split(":")[1])
-    user_id = callback.from_user.id
-    
-    async with DBContext() as session:
         stmt = select(MockExam).where(MockExam.id == mock_id)
         res = await session.execute(stmt)
         mock = res.scalar_one_or_none()
-        
-    provider_token = os.getenv("PAYMENT_PROVIDER_TOKEN")
-    
-    if not provider_token:
-        # If no provider token, fall back to simulated purchase
-        await callback.answer("To'lov provayderi sozlanmagan. Simulyatsiya rejimi ishlatilmoqda.", show_alert=True)
-        await simulated_purchase(callback)
-        return
-        
-    # Send Telegram Invoice
-    prices = [types.LabeledPrice(label=mock.title, amount=int(mock.price) * 100)] # amount is in cents
-    
-    try:
-        await bot.send_invoice(
-            chat_id=user_id,
-            title=mock.title,
-            description=f"CEFR Mock Imtihoniga to'liq kirish.",
-            payload=f"mock:{mock_id}",
-            provider_token=provider_token,
-            currency="UZS",
-            prices=prices,
-            start_parameter=f"mock_buy_{mock_id}"
+        if not mock:
+            await callback.answer("Mock topilmadi.", show_alert=True)
+            return
+
+    card_number = await get_card_number()
+
+    await state.set_state(MockPaymentState.waiting_screenshot)
+    await state.update_data(mock_id=mock_id, mock_title=mock.title, mock_price=mock.price)
+
+    await callback.message.delete()
+    await callback.message.answer(
+        f"💳 **To'lov ma'lumotlari**\n\n"
+        f"📌 **Mock:** {mock.title}\n"
+        f"💰 **Narxi:** {mock.price:,} UZS\n\n"
+        f"🏦 **Karta raqami:**\n"
+        f"`{card_number}`\n\n"
+        f"📋 **Ko'rsatma:**\n"
+        f"1. Yuqoridagi karta raqamiga {mock.price:,} UZS o'tkazing\n"
+        f"2. To'lov chekini (screenshot) shu chatga yuboring\n"
+        f"3. Admin tekshirib, kirish ruxsatini beradi\n\n"
+        f"⏳ Odatda 5-30 daqiqa ichida tasdiqlanadi.",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="mock_back_list")]
+        ])
+    )
+    await callback.answer()
+
+@router.message(MockPaymentState.waiting_screenshot, F.photo)
+async def receive_payment_screenshot(message: types.Message, state: FSMContext, bot: Bot):
+    """User sends payment screenshot — save and notify admins."""
+    data = await state.get_data()
+    mock_id = data.get("mock_id")
+    mock_title = data.get("mock_title")
+    mock_price = data.get("mock_price")
+    user_id = message.from_user.id
+
+    # Get best quality photo
+    photo = message.photo[-1]
+    file_id = photo.file_id
+
+    async with DBContext() as session:
+        purchase = MockPurchase(
+            user_id=user_id,
+            mock_id=mock_id,
+            status="pending",
+            screenshot_file_id=file_id,
+            purchased_at=datetime.datetime.utcnow()
         )
-        await callback.answer()
-    except Exception as e:
-        await callback.answer(f"Invoys yuborishda xatolik yuz berdi: {e}", show_alert=True)
+        session.add(purchase)
+        await session.commit()
+        purchase_id = purchase.id
+
+    await state.clear()
+
+    await message.answer(
+        f"✅ **Chekingiz qabul qilindi!**\n\n"
+        f"📌 {mock_title}\n"
+        f"⏳ Admin tez orada tekshiradi va kirish beradi.\n\n"
+        f"Tasdiqlanganda xabar olasiz!",
+        parse_mode="Markdown"
+    )
+
+    # Notify all admins
+    admin_ids_str = os.getenv("ADMIN_IDS", "")
+    admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip().isdigit()]
+
+    user_name = message.from_user.full_name or "Foydalanuvchi"
+    username = f"@{message.from_user.username}" if message.from_user.username else f"ID: {user_id}"
+
+    caption = (
+        f"💳 **Yangi to'lov so'rovi!**\n\n"
+        f"👤 {user_name} ({username})\n"
+        f"🎓 Mock: **{mock_title}**\n"
+        f"💰 Narxi: {mock_price:,} UZS\n"
+        f"🆔 Purchase ID: #{purchase_id}\n\n"
+        f"To'lov chekini tekshiring va qaror qiling:"
+    )
+    approve_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"mock_approve:{purchase_id}:{user_id}"),
+            InlineKeyboardButton(text="❌ Rad etish", callback_data=f"mock_reject:{purchase_id}:{user_id}")
+        ]
+    ])
+
+    for admin_id in admin_ids:
+        try:
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=file_id,
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=approve_kb
+            )
+        except Exception:
+            pass
+
+@router.message(MockPaymentState.waiting_screenshot)
+async def payment_wrong_format(message: types.Message):
+    await message.answer(
+        "📸 Iltimos, faqat **rasm (screenshot)** yuboring!\n"
+        "To'lov chekining skrinshotini yubormasangiz, to'lovingiz tasdiqlanmaydi.",
+        parse_mode="Markdown"
+    )
+
+# ─── Admin approve / reject ───────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("mock_approve:"))
+async def admin_approve_payment(callback: types.CallbackQuery, bot: Bot):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    purchase_id = int(parts[1])
+    student_id = int(parts[2])
+
+    async with DBContext() as session:
+        p_stmt = select(MockPurchase).where(MockPurchase.id == purchase_id)
+        p_res = await session.execute(p_stmt)
+        purchase = p_res.scalar_one_or_none()
+        if not purchase:
+            await callback.answer("To'lov topilmadi!", show_alert=True)
+            return
+        if purchase.status == "completed":
+            await callback.answer("Bu to'lov allaqachon tasdiqlangan.", show_alert=True)
+            return
+
+        purchase.status = "completed"
+        mock_stmt = select(MockExam).where(MockExam.id == purchase.mock_id)
+        mock_res = await session.execute(mock_stmt)
+        mock = mock_res.scalar_one_or_none()
+        await session.commit()
+
+    mock_title = mock.title if mock else "Mock Exam"
+
+    # Edit admin message
+    await callback.message.edit_caption(
+        caption=callback.message.caption + "\n\n✅ **TASDIQLANDI** — " + callback.from_user.full_name,
+        parse_mode="Markdown",
+        reply_markup=None
+    )
+    await callback.answer("Tasdiqlandi!")
+
+    # Notify student
+    try:
+        await bot.send_message(
+            chat_id=student_id,
+            text=f"🎉 **To'lovingiz tasdiqlandi!**\n\n"
+                 f"🎓 **{mock_title}** mockiga kirish ruxsati berildi.\n"
+                 f"Endi Mock Exam bo'limidan boshlashingiz mumkin! 🚀",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎓 Mock Exanga o'tish", callback_data=f"mock_view:{purchase.mock_id}")]
+            ])
+        )
+    except Exception:
+        pass
+
+@router.callback_query(F.data.startswith("mock_reject:"))
+async def admin_reject_payment(callback: types.CallbackQuery, bot: Bot):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+
+    parts = callback.data.split(":")
+    purchase_id = int(parts[1])
+    student_id = int(parts[2])
+
+    async with DBContext() as session:
+        p_stmt = select(MockPurchase).where(MockPurchase.id == purchase_id)
+        p_res = await session.execute(p_stmt)
+        purchase = p_res.scalar_one_or_none()
+        if not purchase:
+            await callback.answer("To'lov topilmadi!", show_alert=True)
+            return
+
+        purchase.status = "rejected"
+        purchase.reject_reason = "Admin tomonidan rad etildi"
+        await session.commit()
+
+    await callback.message.edit_caption(
+        caption=callback.message.caption + "\n\n❌ **RAD ETILDI** — " + callback.from_user.full_name,
+        parse_mode="Markdown",
+        reply_markup=None
+    )
+    await callback.answer("Rad etildi.")
+
+    try:
+        await bot.send_message(
+            chat_id=student_id,
+            text="❌ **To'lovingiz tasdiqlanmadi.**\n\n"
+                 "Sabab: to'lov cheki noto'g'ri yoki miqdor mos kelmadi.\n"
+                 "Qaytadan to'g'ri miqdorda o'tkazing va yangi chek yuboring.",
+            parse_mode="Markdown"
+        )
+    except Exception:
+        pass
+
 
 # ----------------- RUNNING MOCK EXAM -----------------
 
