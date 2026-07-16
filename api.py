@@ -50,6 +50,7 @@ class QuestionCreate(BaseModel):
     questions_json: List[Dict[str, Any]]
     is_mock: Optional[bool] = False
     is_daily: Optional[bool] = False
+    pdf_file_id: Optional[str] = None
 
 class WritingTaskCreate(BaseModel):
     title: str
@@ -198,7 +199,8 @@ async def admin_add_question(q: QuestionCreate, admin: str = Depends(get_current
             audio_url=q.audio_url,
             questions_json=q.questions_json,
             is_mock=q.is_mock,
-            is_daily=q.is_daily
+            is_daily=q.is_daily,
+            pdf_file_id=q.pdf_file_id
         )
         session.add(question)
         await session.commit()
@@ -228,6 +230,7 @@ async def admin_update_question(q_id: int, q: QuestionCreate, admin: str = Depen
         question.questions_json = q.questions_json
         question.is_mock = q.is_mock
         question.is_daily = q.is_daily
+        question.pdf_file_id = q.pdf_file_id
         await session.commit()
         return {"status": "success"}
 

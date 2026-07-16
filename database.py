@@ -57,6 +57,7 @@ class Question(Base):
     title = Column(String(200))
     text = Column(Text, nullable=True)  # Reading text
     audio_url = Column(String(500), nullable=True)  # Listening audio link or file_id
+    pdf_file_id = Column(String(255), nullable=True)  # Telegram document file_id for direct PDF test papers
     questions_json = Column(JSON)  # List of dicts: [{"id": 1, "q": "Question Text", "options": ["A", "B", "C", "D"], "answer": "A"}]
     is_mock = Column(Boolean, default=False)
     is_daily = Column(Boolean, default=False)
@@ -215,6 +216,15 @@ async def init_db():
         try:
             from sqlalchemy import text
             await session.execute(text("ALTER TABLE questions ADD COLUMN is_daily BOOLEAN DEFAULT FALSE;"))
+            await session.commit()
+        except Exception:
+            await session.rollback()
+
+    # Auto-migrate pdf_file_id to questions
+    async with async_session() as session:
+        try:
+            from sqlalchemy import text
+            await session.execute(text("ALTER TABLE questions ADD COLUMN pdf_file_id VARCHAR(255);"))
             await session.commit()
         except Exception:
             await session.rollback()

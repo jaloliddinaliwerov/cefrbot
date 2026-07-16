@@ -105,6 +105,39 @@ async def start_listening_test(message: types.Message, question: Question, part:
     await state.set_state(ListeningState.answering)
     await state.update_data(question_id=question.id, part=part)
 
+    # Check if there is a direct PDF file attached
+    if getattr(question, "pdf_file_id", None):
+        await message.answer(f"🎧 **Listening - Part {part}**\n📌 **{question.title}**\n\nAudio yuklanmoqda, iltimos kuting...")
+        try:
+            if question.audio_url:
+                audio_link = question.audio_url
+                if audio_link.startswith("/"):
+                    import os
+                    site_url = os.getenv("SITE_URL", "https://cerfbotweb.vercel.com").strip().rstrip("/")
+                    if not site_url.startswith("http"):
+                        site_url = f"https://{site_url}"
+                    audio_link = f"{site_url}{audio_link}"
+                await message.answer_audio(
+                    audio=audio_link,
+                    caption=f"🎧 Listening Part {part} uchun audio fayl."
+                )
+        except Exception:
+            pass
+
+        await message.answer_document(
+            document=question.pdf_file_id,
+            caption=f"🎧 **Listening - Part {part}**\n📌 **{question.title}**\n\nSavollar yuqoridagi PDF fayl ichida keltirilgan."
+        )
+        
+        q_text = (
+            "✍️ **Javoblaringizni bitta xabar shaklida yuboring.**\n"
+            "Masalan:\n"
+            "1-A, 2-C, 3-B (yoki matnli javoblar)\n\n"
+            "Javobingizni quyida yozib yuboring:"
+        )
+        await message.answer(q_text, parse_mode="Markdown")
+        return
+
     await message.answer(f"🎧 **Listening - Part {part}**\n📌 **{question.title}**\n\nAudio yuklanmoqda, iltimos kuting...")
 
     try:

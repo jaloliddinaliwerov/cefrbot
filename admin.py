@@ -2,7 +2,7 @@ import os
 import hashlib
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
-from database import DBContext, MockPurchase, SpeakingSubmission, User, MockExam, SpeakingTask
+from database import DBContext, MockPurchase, SpeakingSubmission, User, MockExam, SpeakingTask, BotSettings
 from sqlalchemy import select
 
 router = Router()
@@ -310,4 +310,108 @@ async def handle_document_test_upload(message: types.Message, bot: Bot):
             except Exception:
                 pass
         await status_msg.edit_text(f"❌ **Faylni tahlil qilishda xatolik:**\n`{str(e)}`")
+
+
+@router.channel_post(F.document)
+async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
+    chat_id = str(message.chat.id)
+    chat_username = f"@{message.chat.username}" if message.chat.username else None
+    
+    async with DBContext() as session:
+        stmt = select(BotSettings)
+        res = await session.execute(stmt)
+        settings = {s.key: s.value for s in res.scalars().all()}
+        
+    channel_mappings = {
+        "chan_read_1": ("reading", 1),
+        "chan_read_2": ("reading", 2),
+        "chan_read_3": ("reading", 3),
+        "chan_read_4": ("reading", 4),
+        "chan_read_5": ("reading", 5),
+        "chan_list_1": ("listening", 1),
+        "chan_list_2": ("listening", 2),
+        "chan_list_3": ("listening", 3),
+        "chan_list_4": ("listening", 4),
+        "chan_list_5": ("listening", 5),
+    }
+    
+    matched_section_part = None
+    for key, (section, part) in channel_mappings.items():
+        val = settings.get(key, "").strip()
+        if not val:
+            continue
+        if val == chat_id or (chat_username and val.lower() == chat_username.lower()):
+            matched_section_part = (section, part)
+            break
+            
+    if not matched_section_part:
+        return
+        
+    section, part = matched_section_part
+    
+    if not message.document.file_name.lower().endswith(".pdf"):
+        return
+        
+    try:
+        import re
+        caption = message.caption or ""
+        lines = [l.strip() for l in caption.split("\n") if l.strip()]
+        title = message.document.file_name.replace(".pdf", "").replace(".PDF", "")
+        
+        if lines:
+            first_line = lines[0]
+            if not re.match(r'^\d+[\s\-:.]+', first_line):
+                title = first_line
+
+        # Extract answers from caption
+        answers_dict = {}
+        parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', caption.strip())
+        
+        if len(parts) <= 1:
+            pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
+            matches = pattern.findall(caption)
+            answers_dict = {int(q_num): ans.strip() for q_num, ans in matches}
+        else:
+            i = 1
+            while i < len(parts):
+                try:
+                    q_num = int(parts[i])
+                    ans_val = parts[i+1].strip()
+                    ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
+                    ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
+                    answers_dict[q_num] = ans_val
+                except (ValueError, IndexError):
+                    pass
+                i += 2
+
+        questions_json = []
+        for q_num, ans in answers_dict.items():
+            questions_json.append({
+                "id": q_num,
+                "q": f"Savol {q_num}",
+                "options": [],
+                "answer": ans
+            })
+            
+        from database import Question
+        async with DBContext() as session:
+            new_q = Question(
+                section=section,
+                part=part,
+                title=title,
+                text=None,
+                audio_url=None,
+                pdf_file_id=message.document.file_id,
+                questions_json=questions_json,
+                is_mock=False,
+                is_daily=False
+            )
+            session.add(new_q)
+            await session.commit()
+            
+        print(f"Direct PDF saved and answers mapped for '{title}' to {section} Part {part} from channel.")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to save direct PDF from channel {chat_id}: {e}")
+
 
