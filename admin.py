@@ -344,11 +344,19 @@ async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
             matched_section_part = (section, part)
             break
             
+    mock_exam_to_update = None
     if not matched_section_part:
+        async with DBContext() as session:
+            stmt = select(MockExam).where(
+                (MockExam.channel_link == chat_id) |
+                (MockExam.channel_link == chat_username)
+            )
+            res = await session.execute(stmt)
+            mock_exam_to_update = res.scalar_one_or_none()
+
+    if not matched_section_part and not mock_exam_to_update:
         return
         
-    section, part = matched_section_part
-    
     if not message.document.file_name.lower().endswith(".pdf"):
         return
         
@@ -384,32 +392,44 @@ async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
                     pass
                 i += 2
 
-        questions_json = []
-        for q_num, ans in answers_dict.items():
-            questions_json.append({
-                "id": q_num,
-                "q": f"Savol {q_num}",
-                "options": [],
-                "answer": ans
-            })
+        if matched_section_part:
+            section, part = matched_section_part
+            questions_json = []
+            for q_num, ans in answers_dict.items():
+                questions_json.append({
+                    "id": q_num,
+                    "q": f"Savol {q_num}",
+                    "options": [],
+                    "answer": ans
+                })
+                
+            from database import Question
+            async with DBContext() as session:
+                new_q = Question(
+                    section=section,
+                    part=part,
+                    title=title,
+                    text=None,
+                    audio_url=None,
+                    pdf_file_id=message.document.file_id,
+                    questions_json=questions_json,
+                    is_mock=False,
+                    is_daily=False
+                )
+                session.add(new_q)
+                await session.commit()
+            print(f"Direct PDF saved and answers mapped for '{title}' to {section} Part {part} from channel.")
+        else:
+            async with DBContext() as session:
+                stmt = select(MockExam).where(MockExam.id == mock_exam_to_update.id)
+                res = await session.execute(stmt)
+                db_mock = res.scalar_one()
+                db_mock.pdf_file_id = message.document.file_id
+                db_mock.answers_json = answers_dict
+                db_mock.title = title
+                await session.commit()
+            print(f"Direct PDF Mock Exam saved and answers mapped for '{title}' (ID: {mock_exam_to_update.id}) from channel.")
             
-        from database import Question
-        async with DBContext() as session:
-            new_q = Question(
-                section=section,
-                part=part,
-                title=title,
-                text=None,
-                audio_url=None,
-                pdf_file_id=message.document.file_id,
-                questions_json=questions_json,
-                is_mock=False,
-                is_daily=False
-            )
-            session.add(new_q)
-            await session.commit()
-            
-        print(f"Direct PDF saved and answers mapped for '{title}' to {section} Part {part} from channel.")
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Failed to save direct PDF from channel {chat_id}: {e}")

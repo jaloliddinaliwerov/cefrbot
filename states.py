@@ -17,3 +17,4 @@ class MockState(StatesGroup):
     answering_listening = State()  # mock_id, question_index
     submitting_writing = State()  # mock_id, task_id
     submitting_speaking = State()  # mock_id, task_id
+    answering_pdf = State()        # mock_id for direct PDF Mock Exams

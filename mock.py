@@ -367,6 +367,33 @@ async def start_mock_exam(callback: types.CallbackQuery, state: FSMContext):
         if not mock:
             await callback.answer("Mock topilmadi.", show_alert=True)
             return
+
+        # Direct PDF Mock Exam Flow
+        if getattr(mock, "pdf_file_id", None):
+            await state.set_state(MockState.answering_pdf)
+            await state.update_data(
+                mock_id=mock_id,
+                correct_answers=mock.answers_json or {}
+            )
+            
+            await callback.message.delete()
+            await callback.message.answer_document(
+                document=mock.pdf_file_id,
+                caption=(
+                    f"🎓 **MOCK IMTIHON (PDF) BOSHLANDI**\n📌 **{mock.title}**\n\n"
+                    f"Savollar va topshiriqlar yuqoridagi PDF fayl ichida keltirilgan."
+                )
+            )
+            
+            q_text = (
+                "✍️ **Javoblaringizni bitta xabar shaklida yuboring.**\n"
+                "Masalan:\n"
+                "`1-A, 2-C, 3-B` (yoki matnli javoblar)\n\n"
+                "Javobingizni quyida yozib yuboring:"
+            )
+            await callback.message.answer(q_text, parse_mode="Markdown")
+            await callback.answer()
+            return
             
         reading_ids = mock.questions_ids or []
         writing_ids = mock.writing_ids or []
@@ -447,9 +474,127 @@ async def send_next_mock_reading(message: types.Message, state: FSMContext):
 # Regex to parse answers
 import re
 def parse_answers(text: str) -> dict:
-    pattern = re.compile(r"(\d+)[\s\-:.]*([A-Da-d])")
-    matches = pattern.findall(text)
-    return {int(q_num): ans.upper() for q_num, ans in matches}
+    answers = {}
+    parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', text.strip())
+    
+    if len(parts) <= 1:
+        pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
+        matches = pattern.findall(text)
+        return {int(q_num): ans.strip() for q_num, ans in matches}
+
+    i = 1
+    while i < len(parts):
+        try:
+            q_num = int(parts[i])
+            ans_val = parts[i+1].strip()
+            ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
+            ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
+            answers[q_num] = ans_val
+        except (ValueError, IndexError):
+            pass
+        i += 2
+        
+    return answers
+
+@router.message(MockState.answering_pdf, F.text)
+async def process_pdf_mock_answers(message: types.Message, state: FSMContext):
+    state_data = await state.get_data()
+    mock_id = state_data.get("mock_id")
+    correct_answers = state_data.get("correct_answers", {})
+    
+    user_answers = parse_answers(message.text)
+    if not user_answers:
+        await message.answer(
+            "⚠️ Javobingiz formati noto'g'ri. Iltimos quyidagi formatda yuboring:\n"
+            "Masalan: `1-A, 2-C, 3-B` yoki\n"
+            "1. Apple\n2. Orange"
+        )
+        return
+        
+    total_questions = len(correct_answers)
+    if total_questions == 0:
+        total_questions = max(user_answers.keys()) if user_answers else 30
+        
+    correct_count = 0
+    result_details = []
+    
+    for q_idx in range(1, total_questions + 1):
+        correct_ans = str(correct_answers.get(str(q_idx)) or correct_answers.get(q_idx) or "").strip()
+        user_ans = str(user_answers.get(q_idx) or "").strip()
+        
+        if not correct_ans:
+            continue
+            
+        def clean_str(s):
+            return re.sub(r'[^\w\s]', '', s.lower().strip())
+            
+        # Match letters or short answer
+        is_mc = len(correct_ans) == 1 and correct_ans.upper() in ["A", "B", "C", "D"]
+        if is_mc:
+            is_correct = (user_ans.upper() == correct_ans.upper())
+        else:
+            is_correct = (clean_str(user_ans) == clean_str(correct_ans))
+            
+        if is_correct:
+            correct_count += 1
+            result_details.append(f"✅ {q_idx}-savol: To'g'ri")
+        else:
+            result_details.append(f"❌ {q_idx}-savol: Noto'g'ri (Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {correct_ans})")
+            
+    percentage = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+    
+    if percentage >= 90:
+        overall_level = "C1"
+    elif percentage >= 70:
+        overall_level = "B2"
+    elif percentage >= 50:
+        overall_level = "B1"
+    elif percentage >= 30:
+        overall_level = "A2"
+    else:
+        overall_level = "A1"
+        
+    async with DBContext() as session:
+        stmt = select(User).where(User.id == message.from_user.id)
+        res = await session.execute(stmt)
+        user = res.scalar_one_or_none()
+        if user:
+            user.xp += 300
+            
+            ach_stmt = select(UserAchievement).where(
+                UserAchievement.user_id == user.id,
+                UserAchievement.achievement_id == "mock_master"
+            )
+            ach_res = await session.execute(ach_stmt)
+            if not ach_res.scalar_one_or_none():
+                new_ach = UserAchievement(user_id=user.id, achievement_id="mock_master")
+                session.add(new_ach)
+                user.xp += 200
+                await message.answer("🎉 **MOCK IMTIHON MASTERI!**\n🏆 Mock Eksperti yutug'i ochildi! | +200 XP")
+                
+        await session.commit()
+        
+    scorecard = (
+        f"🏆 **CEFR MOCK IMTIHON (PDF) SERTIFIKATI** 🏆\n\n"
+        f"👤 **O'quvchi:** {message.from_user.first_name}\n"
+        f"📅 **Sana:** {datetime.date.today().strftime('%Y-%m-%d')}\n"
+        f"🎓 **Yakuniy CEFR daraja:** ✨**{overall_level}**✨\n"
+        f"🎯 **Natija:** {correct_count}/{total_questions} to'g'ri ({percentage:.1f}%)\n\n"
+        f"⚡️ +300 XP hisobingizga qo'shildi!"
+    )
+    
+    if len(result_details) > 0:
+        breakdown_text = "\n\n".join(result_details[:30])
+        if len(result_details) > 30:
+            breakdown_text += "\n\n...va qolgan savollar."
+        await message.answer(f"📊 **Batafsil natijalar:**\n\n{breakdown_text}")
+
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="mock_back_main")]
+    ])
+    
+    await message.answer(scorecard, reply_markup=markup)
+    await state.clear()
 
 @router.message(MockState.answering_reading, F.text)
 async def process_mock_reading(message: types.Message, state: FSMContext):

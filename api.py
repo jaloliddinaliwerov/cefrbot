@@ -68,10 +68,13 @@ class SpeakingTaskCreate(BaseModel):
 class MockExamCreate(BaseModel):
     title: str
     price: int
-    questions_ids: List[int]
-    writing_ids: List[int]
-    speaking_ids: List[int]
+    questions_ids: Optional[List[int]] = []
+    writing_ids: Optional[List[int]] = []
+    speaking_ids: Optional[List[int]] = []
     active: Optional[bool] = True
+    channel_link: Optional[str] = None
+    pdf_file_id: Optional[str] = None
+    answers_json: Optional[Dict[str, str]] = None
 
 # ----------------- PUBLIC ENDPOINTS -----------------
 
@@ -338,7 +341,10 @@ async def admin_add_mock(m: MockExamCreate, admin: str = Depends(get_current_adm
             questions_ids=m.questions_ids,
             writing_ids=m.writing_ids,
             speaking_ids=m.speaking_ids,
-            active=m.active
+            active=m.active,
+            channel_link=m.channel_link,
+            pdf_file_id=m.pdf_file_id,
+            answers_json=m.answers_json
         )
         session.add(mock)
         await session.commit()
@@ -366,6 +372,9 @@ async def admin_update_mock(m_id: int, m: MockExamCreate, admin: str = Depends(g
         mock.writing_ids = m.writing_ids
         mock.speaking_ids = m.speaking_ids
         mock.active = m.active
+        mock.channel_link = m.channel_link
+        mock.pdf_file_id = m.pdf_file_id
+        mock.answers_json = m.answers_json
         await session.commit()
         return {"status": "success"}
 

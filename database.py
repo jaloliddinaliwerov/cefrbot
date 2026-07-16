@@ -136,6 +136,9 @@ class MockExam(Base):
     writing_ids = Column(JSON)  # [1, ...] list of writing task IDs
     speaking_ids = Column(JSON)  # [1, ...] list of speaking task IDs
     active = Column(Boolean, default=True)
+    channel_link = Column(String(255), nullable=True)  # Telegram channel for mock test PDF
+    pdf_file_id = Column(String(255), nullable=True)   # Telegram document file_id for mock PDF
+    answers_json = Column(JSON, nullable=True)         # Mapped correct answers for direct PDF mock test
 
 class MockPurchase(Base):
     __tablename__ = "mock_purchases"
@@ -228,6 +231,20 @@ async def init_db():
             await session.commit()
         except Exception:
             await session.rollback()
+
+    # Auto-migrate mock_exams columns
+    async with async_session() as session:
+        for col_sql in [
+            "ALTER TABLE mock_exams ADD COLUMN channel_link VARCHAR(255);",
+            "ALTER TABLE mock_exams ADD COLUMN pdf_file_id VARCHAR(255);",
+            "ALTER TABLE mock_exams ADD COLUMN answers_json JSON;",
+        ]:
+            try:
+                from sqlalchemy import text
+                await session.execute(text(col_sql))
+                await session.commit()
+            except Exception:
+                await session.rollback()
             
     # Insert default achievements
     async with async_session() as session:
