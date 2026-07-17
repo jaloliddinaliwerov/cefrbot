@@ -11,6 +11,30 @@ from database import DBContext, User
 
 router = Router()
 
+def parse_telegram_message_link(link: str):
+    import re
+    if not link:
+        return None, None
+    link = link.strip()
+    
+    # Match public channel link (e.g. https://t.me/mychannel/123 or t.me/mychannel/123)
+    public_match = re.search(r'(?:t\.me/|telegram\.me/)([^/]+)/(\d+)', link)
+    if public_match:
+        chat = public_match.group(1)
+        if not chat.startswith("-100") and not chat.isdigit():
+            chat = f"@{chat}"
+        msg_id = int(public_match.group(2))
+        return chat, msg_id
+        
+    # Match private channel link (e.g. https://t.me/c/123456789/123)
+    private_match = re.search(r'(?:t\.me/c/|telegram\.me/c/)(\d+)/(\d+)', link)
+    if private_match:
+        chat = f"-100{private_match.group(1)}"
+        msg_id = int(private_match.group(2))
+        return chat, msg_id
+        
+    return None, None
+
 # ─── Channel subscription helpers ────────────────────────────────────────────
 
 def get_required_channel() -> str:
