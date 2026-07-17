@@ -312,9 +312,32 @@ async def handle_document_test_upload(message: types.Message, bot: Bot):
         await status_msg.edit_text(f"❌ **Faylni tahlil qilishda xatolik:**\n`{str(e)}`")
 
 
+def match_telegram_channel(val: str, chat_id: int, chat_username: str) -> bool:
+    if not val:
+        return False
+    val = val.strip().lower()
+    chat_id_str = str(chat_id)
+    
+    if val == chat_id_str:
+        return True
+        
+    val_clean = val.replace("https://t.me/", "").replace("http://t.me/", "").replace("t.me/", "").replace("@", "").strip()
+    username_clean = chat_username.replace("@", "").strip().lower() if chat_username else ""
+    
+    if username_clean and val_clean == username_clean:
+        return True
+        
+    val_digits = "".join(filter(str.isdigit, val_clean))
+    chat_id_digits = "".join(filter(str.isdigit, chat_id_str))
+    
+    if val_digits and chat_id_digits and val_digits in chat_id_digits:
+        return True
+        
+    return False
+
 @router.channel_post(F.document)
 async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
-    chat_id = str(message.chat.id)
+    chat_id = message.chat.id
     chat_username = f"@{message.chat.username}" if message.chat.username else None
     
     async with DBContext() as session:
@@ -338,21 +361,20 @@ async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
     matched_section_part = None
     for key, (section, part) in channel_mappings.items():
         val = settings.get(key, "").strip()
-        if not val:
-            continue
-        if val == chat_id or (chat_username and val.lower() == chat_username.lower()):
+        if match_telegram_channel(val, chat_id, chat_username):
             matched_section_part = (section, part)
             break
             
     mock_exam_to_update = None
     if not matched_section_part:
         async with DBContext() as session:
-            stmt = select(MockExam).where(
-                (MockExam.channel_link == chat_id) |
-                (MockExam.channel_link == chat_username)
-            )
+            stmt = select(MockExam)
             res = await session.execute(stmt)
-            mock_exam_to_update = res.scalar_one_or_none()
+            mocks = res.scalars().all()
+            for m in mocks:
+                if match_telegram_channel(m.channel_link, chat_id, chat_username):
+                    mock_exam_to_update = m
+                    break
 
     if not matched_section_part and not mock_exam_to_update:
         return
@@ -373,24 +395,24 @@ async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
 
         # Extract answers from caption
         answers_dict = {}
-        parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', caption.strip())
-        
-        if len(parts) <= 1:
+        matches = list(re.finditer(r'(?:^|[\s,;\n])(\d+)[\s\-:.]+', caption))
+        if not matches:
             pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
             matches = pattern.findall(caption)
             answers_dict = {int(q_num): ans.strip() for q_num, ans in matches}
         else:
-            i = 1
-            while i < len(parts):
-                try:
-                    q_num = int(parts[i])
-                    ans_val = parts[i+1].strip()
-                    ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
-                    ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
-                    answers_dict[q_num] = ans_val
-                except (ValueError, IndexError):
-                    pass
-                i += 2
+            for idx, match in enumerate(matches):
+                q_num = int(match.group(1))
+                start_pos = match.end()
+                if idx + 1 < len(matches):
+                    end_pos = matches[idx + 1].start()
+                    ans_val = caption[start_pos:end_pos].strip()
+                else:
+                    ans_val = caption[start_pos:].strip()
+                    
+                ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
+                ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
+                answers_dict[q_num] = ans_val
 
         if matched_section_part:
             section, part = matched_section_part
