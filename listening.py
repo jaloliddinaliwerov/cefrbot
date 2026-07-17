@@ -186,24 +186,24 @@ async def start_listening_test(message: types.Message, question: Question, part:
 
 def parse_user_answers(text: str) -> dict:
     answers = {}
-    parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', text.strip())
-    
-    if len(parts) <= 1:
+    matches = list(re.finditer(r'(?:^|[\s,;\n])(\d+)[\s\-:.]+', text))
+    if not matches:
         pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
         matches = pattern.findall(text)
         return {int(q_num): ans.strip() for q_num, ans in matches}
-
-    i = 1
-    while i < len(parts):
-        try:
-            q_num = int(parts[i])
-            ans_val = parts[i+1].strip()
-            ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
-            ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
-            answers[q_num] = ans_val
-        except (ValueError, IndexError):
-            pass
-        i += 2
+        
+    for idx, match in enumerate(matches):
+        q_num = int(match.group(1))
+        start_pos = match.end()
+        if idx + 1 < len(matches):
+            end_pos = matches[idx + 1].start()
+            ans_val = text[start_pos:end_pos].strip()
+        else:
+            ans_val = text[start_pos:].strip()
+            
+        ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
+        ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
+        answers[q_num] = ans_val
         
     return answers
 
@@ -241,10 +241,11 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
         result_details = []
         
         for idx, q_item in enumerate(questions_list, 1):
+            q_id_num = q_item.get("id", idx)
             correct_ans = q_item["answer"].strip()
             has_opts = len(q_item.get('options', [])) > 0
             
-            user_ans = user_answers.get(idx, "").strip()
+            user_ans = user_answers.get(q_id_num, "").strip()
             
             if has_opts:
                 if len(correct_ans) > 1 and ":" in correct_ans:
@@ -260,11 +261,11 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
                 
             if is_correct:
                 correct_count += 1
-                result_details.append(f"✅ {idx}-savol: To'g'ri")
+                result_details.append(f"✅ {q_id_num}-savol: To'g'ri")
             else:
-                wrong_answers[idx] = user_ans
+                wrong_answers[q_id_num] = user_ans
                 show_correct = correct_ans.split(":")[0] if has_opts else correct_ans
-                result_details.append(f"❌ {idx}-savol: Noto'g'ri (Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {show_correct})")
+                result_details.append(f"❌ {q_id_num}-savol: Noto'g'ri (Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {show_correct})")
 
         percentage = (correct_count / total_questions) * 100
         xp_earned = correct_count * 10
