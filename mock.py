@@ -369,7 +369,8 @@ async def start_mock_exam(callback: types.CallbackQuery, state: FSMContext):
             return
 
         # Direct PDF Mock Exam Flow
-        if getattr(mock, "pdf_file_id", None):
+        pdf_val = getattr(mock, "pdf_file_id", None)
+        if pdf_val:
             await state.set_state(MockState.answering_pdf)
             await state.update_data(
                 mock_id=mock_id,
@@ -377,21 +378,44 @@ async def start_mock_exam(callback: types.CallbackQuery, state: FSMContext):
             )
             
             await callback.message.delete()
-            await callback.message.answer_document(
-                document=mock.pdf_file_id,
-                caption=(
-                    f"🎓 **MOCK IMTIHON (PDF) BOSHLANDI**\n📌 **{mock.title}**\n\n"
-                    f"Savollar va topshiriqlar yuqoridagi PDF fayl ichida keltirilgan."
+            if pdf_val.startswith("http") or "t.me" in pdf_val:
+                from common import parse_telegram_message_link
+                chat_id, msg_id = parse_telegram_message_link(pdf_val)
+                if chat_id and msg_id:
+                    try:
+                        await callback.message.bot.copy_message(
+                            chat_id=callback.message.chat.id,
+                            from_chat_id=chat_id,
+                            message_id=msg_id
+                        )
+                        await callback.message.answer(
+                            f"📌 *{mock.title}* — PDF testi yuborildi.\n\n"
+                            "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
+                            "Masalan: `1-A, 2-C, 3-B`\n\n"
+                            "Javobingizni quyida yozib yuboring:",
+                            parse_mode="Markdown"
+                        )
+                    except Exception as e:
+                        await callback.message.answer(f"⚠️ Telegram kanaldan PDF faylini nusxalashda xatolik yuz berdi: {e}\nIltimos, ssilkani to'g'ri kiritilganligini va bot kanalda adminligini tekshiring.")
+                        return
+                else:
+                    await callback.message.answer("⚠️ PDF ssilkasi formati noto'g'ri. Iltimos admin panelda havolani tekshiring.")
+                    return
+            else:
+                await callback.message.answer_document(
+                    document=pdf_val,
+                    caption=(
+                        f"🎓 **MOCK IMTIHON (PDF) BOSHLANDI**\n📌 **{mock.title}**\n\n"
+                        f"Savollar va topshiriqlar yuqoridagi PDF fayl ichida keltirilgan."
+                    )
                 )
-            )
+                await callback.message.answer(
+                    "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
+                    "Masalan: `1-A, 2-C, 3-B`\n\n"
+                    "Javobingizni quyida yozib yuboring:",
+                    parse_mode="Markdown"
+                )
             
-            q_text = (
-                "✍️ **Javoblaringizni bitta xabar shaklida yuboring.**\n"
-                "Masalan:\n"
-                "`1-A, 2-C, 3-B` (yoki matnli javoblar)\n\n"
-                "Javobingizni quyida yozib yuboring:"
-            )
-            await callback.message.answer(q_text, parse_mode="Markdown")
             await callback.answer()
             return
             
@@ -474,26 +498,34 @@ async def send_next_mock_reading(message: types.Message, state: FSMContext):
 # Regex to parse answers
 import re
 def parse_answers(text: str) -> dict:
+    """
+    Parse answer strings like '1-A, 2-C, 3-B' or '1. A\n2. B\n3. C'
+    Returns {1: 'A', 2: 'C', 3: 'B'}
+    """
     answers = {}
-    parts = re.split(r'(?:^|[\n,;])\s*(\d+)[\s\-:.]+', text.strip())
+    text = text.strip()
     
-    if len(parts) <= 1:
-        pattern = re.compile(r"(\d+)[\s\-:.]*([^\s,;]+)")
-        matches = pattern.findall(text)
-        return {int(q_num): ans.strip() for q_num, ans in matches}
-
-    i = 1
-    while i < len(parts):
-        try:
-            q_num = int(parts[i])
-            ans_val = parts[i+1].strip()
-            ans_val = re.sub(r'^[,\s\-:.]+', '', ans_val)
-            ans_val = re.sub(r'[,\s\-:.;]+$', '', ans_val)
-            answers[q_num] = ans_val
-        except (ValueError, IndexError):
-            pass
-        i += 2
-        
+    # Primary pattern: match `N-answer` or `N. answer` or `N: answer`
+    pattern = re.compile(
+        r'(?:^|(?<=[\n,;]))\s*(\d+)\s*[\-\.:]\s*([A-Za-z][^0-9\n,;]*?|[^\s\n,;]+)',
+        re.MULTILINE
+    )
+    matches = pattern.findall(text)
+    
+    if matches:
+        for q_num_str, ans_val in matches:
+            q_num = int(q_num_str)
+            ans_clean = ans_val.strip().rstrip('.,;: ')
+            if ans_clean:
+                answers[q_num] = ans_clean
+        return answers
+    
+    # Fallback: simple N-X pattern anywhere in text
+    simple_pattern = re.compile(r'(\d+)\s*[\-\.:]\s*(\S+)')
+    simple_matches = simple_pattern.findall(text)
+    for q_num_str, ans_val in simple_matches:
+        answers[int(q_num_str)] = ans_val.strip().rstrip('.,;: ')
+    
     return answers
 
 @router.message(MockState.answering_pdf, F.text)
@@ -511,25 +543,33 @@ async def process_pdf_mock_answers(message: types.Message, state: FSMContext):
         )
         return
         
-    total_questions = len(correct_answers)
+    # correct_answers keys may be str or int — normalize to int
+    normalized_correct = {}
+    for k, v in correct_answers.items():
+        try:
+            normalized_correct[int(k)] = str(v).strip()
+        except (ValueError, TypeError):
+            pass
+    
+    total_questions = len(normalized_correct)
     if total_questions == 0:
         total_questions = max(user_answers.keys()) if user_answers else 30
         
     correct_count = 0
     result_details = []
     
+    def clean_str(s):
+        return re.sub(r'[^\w\s]', '', s.lower().strip())
+
     for q_idx in range(1, total_questions + 1):
-        correct_ans = str(correct_answers.get(str(q_idx)) or correct_answers.get(q_idx) or "").strip()
+        correct_ans = normalized_correct.get(q_idx, "").strip()
         user_ans = str(user_answers.get(q_idx) or "").strip()
         
         if not correct_ans:
             continue
             
-        def clean_str(s):
-            return re.sub(r'[^\w\s]', '', s.lower().strip())
-            
         # Match letters or short answer
-        is_mc = len(correct_ans) == 1 and correct_ans.upper() in ["A", "B", "C", "D"]
+        is_mc = len(correct_ans) == 1 and correct_ans.upper() in ["A", "B", "C", "D", "E", "F"]
         if is_mc:
             is_correct = (user_ans.upper() == correct_ans.upper())
         else:
@@ -797,11 +837,11 @@ async def grade_mock_exam(message: types.Message, state: FSMContext, bot: Bot):
     await message.answer("📥 **Imtihon topshirildi!**\nSun'iy intellekt javoblaringizni tekshirmoqda, iltimos kuting (1-2 daqiqa)...")
     
     data = await state.get_data()
-    results_reading = data["results_reading"]
-    results_listening = data["results_listening"]
-    writing_text = data["writing_text"]
+    results_reading = data.get("results_reading", {})
+    results_listening = data.get("results_listening", {})
+    writing_text = data.get("writing_text", "")
     writing_prompt = data.get("writing_prompt", "")
-    speaking_file_id = data["speaking_file_id"]
+    speaking_file_id = data.get("speaking_file_id", "")
     speaking_prompt = data.get("speaking_prompt", "")
     
     # 1. Evaluate Reading & Listening

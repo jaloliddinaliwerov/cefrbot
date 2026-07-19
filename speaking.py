@@ -4,7 +4,7 @@ from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
-from database import DBContext, SpeakingTask, SpeakingSubmission, User, UserAchievement, SpeakingTask
+from database import DBContext, SpeakingTask, SpeakingSubmission, User, UserAchievement
 from states import SpeakingState
 
 router = Router()

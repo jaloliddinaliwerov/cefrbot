@@ -320,13 +320,25 @@ def match_telegram_channel(val: str, chat_id: int, chat_username: str) -> bool:
     
     if val == chat_id_str:
         return True
-        
-    val_clean = val.replace("https://t.me/", "").replace("http://t.me/", "").replace("t.me/", "").replace("@", "").strip()
-    username_clean = chat_username.replace("@", "").strip().lower() if chat_username else ""
+
+    # Strip common prefixes
+    val_clean = (
+        val.replace("https://t.me/", "")
+           .replace("http://t.me/", "")
+           .replace("t.me/", "")
+           .replace("@", "")
+           .strip()
+    )
+    
+    # Compare with channel username (safely handle None)
+    username_clean = ""
+    if chat_username:
+        username_clean = str(chat_username).replace("@", "").strip().lower()
     
     if username_clean and val_clean == username_clean:
         return True
         
+    # Compare numeric parts
     val_digits = "".join(filter(str.isdigit, val_clean))
     chat_id_digits = "".join(filter(str.isdigit, chat_id_str))
     
@@ -419,11 +431,16 @@ async def handle_channel_pdf_upload(message: types.Message, bot: Bot):
             questions_json = []
             for q_num, ans in answers_dict.items():
                 questions_json.append({
-                    "id": q_num,
+                    "id": int(q_num) if isinstance(q_num, str) and q_num.isdigit() else q_num,
                     "q": f"Savol {q_num}",
                     "options": [],
-                    "answer": ans
+                    "answer": str(ans).strip()
                 })
+            
+            if not questions_json:
+                # No answers in caption — save with empty placeholder so PDF is sent to user
+                # but answers won't be checked automatically
+                questions_json = [{"id": 1, "q": "PDF savollariga javob bering", "options": [], "answer": ""}]
                 
             from database import Question
             async with DBContext() as session:
