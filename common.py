@@ -17,20 +17,41 @@ def parse_telegram_message_link(link: str):
         return None, None
     link = link.strip()
     
-    # Match public channel link (e.g. https://t.me/mychannel/123 or t.me/mychannel/123)
-    public_match = re.search(r'(?:t\.me/|telegram\.me/)([^/]+)/(\d+)', link)
+    # 1. Match private channel or supergroup message links
+    # Format: t.me/c/CHAT_ID/MSG_ID or t.me/c/CHAT_ID/TOPIC_ID/MSG_ID
+    private_match = re.search(r'(?:t\.me/c/|telegram\.me/c/)(\d+)/(\d+)(?:/(\d+))?', link)
+    if private_match:
+        chat_id_str = private_match.group(1)
+        # If there are 3 groups of digits, group(3) is MSG_ID and group(2) is TOPIC_ID
+        if private_match.group(3):
+            msg_id = int(private_match.group(3))
+        else:
+            msg_id = int(private_match.group(2))
+        
+        chat_id_val = f"-100{chat_id_str}"
+        try:
+            return int(chat_id_val), msg_id
+        except ValueError:
+            return chat_id_val, msg_id
+            
+    # 2. Match public channel or supergroup message links (excluding "/c/")
+    # Format: t.me/username/MSG_ID or t.me/username/TOPIC_ID/MSG_ID
+    public_match = re.search(r'(?:t\.me/|telegram\.me/)(?!c/)([^/]+)/(\d+)(?:/(\d+))?', link)
     if public_match:
         chat = public_match.group(1)
+        # If there are 3 groups of digits, group(3) is MSG_ID
+        if public_match.group(3):
+            msg_id = int(public_match.group(3))
+        else:
+            msg_id = int(public_match.group(2))
+            
         if not chat.startswith("-100") and not chat.isdigit():
             chat = f"@{chat}"
-        msg_id = int(public_match.group(2))
-        return chat, msg_id
-        
-    # Match private channel link (e.g. https://t.me/c/123456789/123)
-    private_match = re.search(r'(?:t\.me/c/|telegram\.me/c/)(\d+)/(\d+)', link)
-    if private_match:
-        chat = f"-100{private_match.group(1)}"
-        msg_id = int(private_match.group(2))
+        else:
+            try:
+                chat = int(chat)
+            except ValueError:
+                pass
         return chat, msg_id
         
     return None, None
