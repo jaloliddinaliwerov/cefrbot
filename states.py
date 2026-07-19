@@ -18,3 +18,6 @@ class MockState(StatesGroup):
     submitting_writing = State()  # mock_id, task_id
     submitting_speaking = State()  # mock_id, task_id
     answering_pdf = State()        # mock_id for direct PDF Mock Exams
+
+class AdminState(StatesGroup):
+    waiting_broadcast = State()  # waiting for broadcast message text

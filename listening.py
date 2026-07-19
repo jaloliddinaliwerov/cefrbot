@@ -1,10 +1,12 @@
 import re
+import os
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement
 from states import ListeningState
+from answer_utils import parse_answers_universal, check_answers, send_result_messages
 
 router = Router()
 
@@ -93,73 +95,88 @@ async def start_listening_test_cb(callback: types.CallbackQuery, state: FSMConte
         stmt = select(Question).where(Question.id == q_id)
         res = await session.execute(stmt)
         question = res.scalar_one_or_none()
-        
         if not question:
             await callback.answer("Test topilmadi.", show_alert=True)
             return
-            
         await callback.message.delete()
         await start_listening_test(callback.message, question, part, state)
         await callback.answer()
 
+async def _send_audio(message: types.Message, audio_url: str, part: int):
+    """Send audio file. Returns True if sent successfully."""
+    try:
+        if audio_url.startswith("/"):
+            site_url = os.getenv("SITE_URL", "").strip().rstrip("/")
+            if site_url and not site_url.startswith("http"):
+                site_url = f"https://{site_url}"
+            audio_url = f"{site_url}{audio_url}" if site_url else audio_url
+        await message.answer_audio(
+            audio=audio_url,
+            caption=f"🎧 Listening Part {part} — Audio fayl"
+        )
+        return True
+    except Exception as e:
+        await message.answer(f"⚠️ Audio yuklashda xatolik: {e}\nSavollarni matn orqali ishlashingiz mumkin.")
+        return False
+
+async def _send_pdf(message: types.Message, pdf_val: str, state: FSMContext) -> bool:
+    """Send PDF from channel link or file_id. Returns True on success."""
+    if pdf_val.startswith("http") or "t.me" in pdf_val:
+        from common import parse_telegram_message_link
+        chat_id, msg_id = parse_telegram_message_link(pdf_val)
+        if chat_id and msg_id:
+            try:
+                await message.bot.copy_message(
+                    chat_id=message.chat.id,
+                    from_chat_id=chat_id,
+                    message_id=msg_id
+                )
+                return True
+            except Exception as e:
+                await message.answer(
+                    f"⚠️ PDF faylni yuborishda xatolik: {e}\n"
+                    "Bot kanalda admin ekanligini tekshiring."
+                )
+                await state.clear()
+                return False
+        else:
+            await message.answer("⚠️ PDF ssilkasi formati noto'g'ri.")
+            await state.clear()
+            return False
+    else:
+        try:
+            await message.answer_document(document=pdf_val)
+            return True
+        except Exception as e:
+            await message.answer(f"⚠️ PDF faylni yuborishda xatolik: {e}")
+            await state.clear()
+            return False
+
+def _answer_hint() -> str:
+    return (
+        "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
+        "Quyidagi formatlarning istalganida yozishingiz mumkin:\n\n"
+        "`1-A, 2-C, 3-B`\n"
+        "`1. Apple  2. Orange  3. Banana`\n"
+        "`1A 2B 3C`\n"
+        "`A B C D E` (tartib bo'yicha)\n\n"
+        "Javobingizni quyida yozib yuboring:"
+    )
+
 async def start_listening_test(message: types.Message, question: Question, part: int, state: FSMContext):
-    # Set FSM state
     await state.set_state(ListeningState.answering)
     await state.update_data(question_id=question.id, part=part)
 
-    # Check if there is a direct PDF file attached or linked (channel-based test)
+    # Send audio first (if any), then PDF or text questions
+    if question.audio_url:
+        await _send_audio(message, question.audio_url, part)
+
+    # Check for PDF
     pdf_val = getattr(question, "pdf_file_id", None)
     if pdf_val:
-        # First send audio if it exists (for channel-based tests too)
-        if question.audio_url:
-            try:
-                import os
-                audio_link = question.audio_url
-                if audio_link.startswith("/"):
-                    site_url = os.getenv("SITE_URL", "").strip().rstrip("/")
-                    if site_url and not site_url.startswith("http"):
-                        site_url = f"https://{site_url}"
-                    audio_link = f"{site_url}{audio_link}" if site_url else audio_link
-                await message.answer_audio(
-                    audio=audio_link,
-                    caption=f"🎧 Listening Part {part} uchun audio fayl."
-                )
-            except Exception:
-                pass
-
-        # Send PDF from channel link or file_id
-        if pdf_val.startswith("http") or "t.me" in pdf_val:
-            from common import parse_telegram_message_link
-            chat_id, msg_id = parse_telegram_message_link(pdf_val)
-            if chat_id and msg_id:
-                try:
-                    await message.bot.copy_message(
-                        chat_id=message.chat.id,
-                        from_chat_id=chat_id,
-                        message_id=msg_id
-                    )
-                except Exception as e:
-                    await message.answer(
-                        f"⚠️ PDF faylni yuborishda xatolik: {e}\n"
-                        "Bot kanalda admin ekanligini tekshiring."
-                    )
-                    await state.clear()
-                    return
-            else:
-                await message.answer("⚠️ PDF ssilkasi formati noto'g'ri. Admin panelda havolani tekshiring.")
-                await state.clear()
-                return
-        else:
-            try:
-                await message.answer_document(
-                    document=pdf_val,
-                    caption=f"🎧 *Listening - Part {part}*\n📌 *{question.title}*",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                await message.answer(f"⚠️ PDF faylni yuborishda xatolik: {e}")
-                await state.clear()
-                return
+        sent_ok = await _send_pdf(message, pdf_val, state)
+        if not sent_ok:
+            return
 
         questions_list = question.questions_json or []
         total = len(questions_list)
@@ -169,46 +186,22 @@ async def start_listening_test(message: types.Message, question: Question, part:
         )
         if total > 0:
             q_text += f"📝 Jami *{total}* ta savol bor.\n\n"
-        q_text += (
-            "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
-            "Masalan:\n"
-            "`1-A, 2-C, 3-B` (harfli javoblar)\n"
-            "yoki\n"
-            "`1-Apple, 2-Orange` (matnli javoblar)\n\n"
-            "Javobingizni quyida yozib yuboring:"
-        )
+        q_text += _answer_hint()
         await message.answer(q_text, parse_mode="Markdown")
         return
 
-    # No PDF — send audio then text-based questions
-    await message.answer(f"🎧 *Listening - Part {part}*\n📌 *{question.title}*\n\nAudio yuklanmoqda...", parse_mode="Markdown")
-
-    try:
-        import os
-        if question.audio_url:
-            audio_link = question.audio_url
-            if audio_link.startswith("/"):
-                site_url = os.getenv("SITE_URL", "").strip().rstrip("/")
-                if site_url and not site_url.startswith("http"):
-                    site_url = f"https://{site_url}"
-                audio_link = f"{site_url}{audio_link}" if site_url else audio_link
-            await message.answer_audio(
-                audio=audio_link,
-                caption=f"🎧 Listening Part {part} uchun audio fayl."
-            )
-        else:
-            await message.answer("⚠️ Audio fayl topilmadi, quyidagi savollarga matn asosida javob bering.")
-    except Exception:
-        await message.answer("⚠️ Audio faylni yuklashda xatolik. Lekin siz savollarni ishlashingiz mumkin.")
-
-    # Format questions text
+    # Text-based questions (no PDF)
     questions_list = question.questions_json or []
     if not questions_list:
         await message.answer("⚠️ Bu testda savollar topilmadi. Admin bilan bog'laning.")
         await state.clear()
         return
 
-    q_text = "📝 *Savollar:*\n"
+    if not question.audio_url:
+        await message.answer("⚠️ Audio fayl topilmadi, savollarga matn asosida javob bering.")
+
+    q_text = f"🎧 *Listening - Part {part}*\n📌 *{question.title}*\n\n"
+    q_text += "📝 *Savollar:*\n"
     has_options = any(len(q_item.get('options', [])) > 0 for q_item in questions_list)
     
     for idx, q_item in enumerate(questions_list, 1):
@@ -217,53 +210,15 @@ async def start_listening_test(message: types.Message, question: Question, part:
             q_text += f"   {opt}\n"
             
     if has_options:
-        q_text += (
-            "\n✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
-            "Masalan: `1-A, 2-B` (Harflar kattaligi muhim emas)"
-        )
+        q_text += "\n✍️ Javob formati: `1-A, 2-B, 3-C`"
     else:
-        q_text += (
-            "\n✍️ *Javoblaringizni har bir savol tartib raqami bilan yozib yuboring.*\n"
-            "Masalan:\n"
-            "`1-Apple`\n"
-            "`2-Orange`\n"
-            "`3-Banana`\n"
-            "(Harflar kattaligi va ortiqcha bo'shliqlar hisobga olinmaydi)"
-        )
-    
-    await message.answer(q_text, parse_mode="Markdown")
+        q_text += "\n✍️ Javob formati: `1-Apple, 2-Orange, 3-Banana`"
 
-def parse_user_answers(text: str) -> dict:
-    """
-    Parses answer strings like:
-      '1-A, 2-B, 3-C'
-      '1. A\n2. B\n3. C'
-    Returns {1: 'A', 2: 'B', 3: 'C'}
-    """
-    answers = {}
-    text = text.strip()
-    
-    pattern = re.compile(
-        r'(?:^|(?<=[\n,;]))\s*(\d+)\s*[\-\.:]\s*([A-Za-z][^0-9\n,;]*?|[^\s\n,;]+)',
-        re.MULTILINE
-    )
-    matches = pattern.findall(text)
-    
-    if matches:
-        for q_num_str, ans_val in matches:
-            q_num = int(q_num_str)
-            ans_clean = ans_val.strip().rstrip('.,;: ')
-            if ans_clean:
-                answers[q_num] = ans_clean
-        return answers
-    
-    # Fallback: simple split
-    simple_pattern = re.compile(r'(\d+)\s*[\-\.:]\s*(\S+)')
-    simple_matches = simple_pattern.findall(text)
-    for q_num_str, ans_val in simple_matches:
-        answers[int(q_num_str)] = ans_val.strip().rstrip('.,;: ')
-    
-    return answers
+    if len(q_text) > 4000:
+        await message.answer(q_text[:4000], parse_mode="Markdown")
+        await message.answer(q_text[4000:] + "\n\n✍️ Javoblarni yozing:", parse_mode="Markdown")
+    else:
+        await message.answer(q_text, parse_mode="Markdown")
 
 @router.message(ListeningState.answering, F.text)
 async def process_listening_answers(message: types.Message, state: FSMContext):
@@ -271,13 +226,15 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
     question_id = state_data.get("question_id")
     part = state_data.get("part")
     
-    user_answers = parse_user_answers(message.text)
+    user_answers = parse_answers_universal(message.text)
     
     if not user_answers:
         await message.answer(
-            "⚠️ Javobingiz formati noto'g'ri. Iltimos quyidagi formatda yuboring:\n"
-            "Masalan: `1-A, 2-B` yoki\n"
-            "`1-Apple, 2-Orange`",
+            "⚠️ Javobingiz formatini aniqlab bo'lmadi.\n"
+            "Iltimos quyidagi formatlardan birida yuboring:\n"
+            "`1-A, 2-C, 3-B`\n"
+            "`1. Apple  2. Orange`\n"
+            "`A B C D` (tartib bo'yicha)",
             parse_mode="Markdown"
         )
         return
@@ -286,7 +243,6 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
     correct_count = 0
     total_questions = 0
     percentage = 0.0
-    result_details = []
 
     async with DBContext() as session:
         stmt = select(Question).where(Question.id == question_id)
@@ -306,40 +262,11 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
             await state.clear()
             return
         
-        wrong_answers = {}
+        correct_count, result_details, wrong_answers = check_answers(user_answers, questions_list)
         
-        for idx, q_item in enumerate(questions_list, 1):
-            q_id_num = q_item.get("id", idx)
-            correct_ans = str(q_item.get("answer", "")).strip()
-            has_opts = len(q_item.get('options', [])) > 0
-            
-            user_ans = str(user_answers.get(q_id_num) or user_answers.get(idx) or "").strip()
-            
-            if has_opts:
-                c_letter = correct_ans.split(":")[0].strip() if ":" in correct_ans else correct_ans
-                u_letter = user_ans.split(":")[0].strip() if ":" in user_ans else user_ans
-                is_correct = (u_letter.upper() == c_letter.upper())
-                show_correct = c_letter
-            else:
-                def clean_str(s):
-                    return re.sub(r'[^\w\s]', '', s.lower().strip())
-                is_correct = (clean_str(user_ans) == clean_str(correct_ans))
-                show_correct = correct_ans
-                
-            if is_correct:
-                correct_count += 1
-                result_details.append(f"✅ {q_id_num}-savol: To'g'ri")
-            else:
-                wrong_answers[str(q_id_num)] = user_ans
-                result_details.append(
-                    f"❌ {q_id_num}-savol: Noto'g'ri "
-                    f"(Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {show_correct})"
-                )
-
         percentage = (correct_count / total_questions) * 100
         xp_earned = correct_count * 10
-        
-        # Save progress
+
         progress = UserProgress(
             user_id=message.from_user.id,
             question_id=question_id,
@@ -349,7 +276,6 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
         )
         session.add(progress)
         
-        # Save to incorrect questions bank
         if wrong_answers:
             wrong_stmt = select(UserIncorrectQuestion).where(
                 UserIncorrectQuestion.user_id == message.from_user.id,
@@ -357,7 +283,6 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
             )
             wrong_res = await session.execute(wrong_stmt)
             incorrect_entry = wrong_res.scalar_one_or_none()
-            
             if not incorrect_entry:
                 incorrect_entry = UserIncorrectQuestion(
                     user_id=message.from_user.id,
@@ -377,7 +302,6 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
             if incorrect_entry:
                 await session.delete(incorrect_entry)
 
-        # Update User XP
         user_stmt = select(User).where(User.id == message.from_user.id)
         user_res = await session.execute(user_stmt)
         user = user_res.scalar_one_or_none()
@@ -386,7 +310,6 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
                 xp_earned *= 2
             user.xp += xp_earned
             
-            # Unlock achievements — First test
             ach_stmt = select(UserAchievement).where(
                 UserAchievement.user_id == user.id,
                 UserAchievement.achievement_id == "first_test"
@@ -396,19 +319,25 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
                 new_ach = UserAchievement(user_id=user.id, achievement_id="first_test")
                 session.add(new_ach)
                 user.xp += 50
-                await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 Birinchi Qadam (Birinchi testni topshirdingiz!) | +50 XP", parse_mode="Markdown")
+                await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 Birinchi Qadam | +50 XP", parse_mode="Markdown")
 
         await session.commit()
 
     await state.clear()
-        
-    # Output results
-    res_msg = "📊 *Listening Natijasi:*\n\n"
-    res_msg += "\n".join(result_details) + "\n\n"
-    res_msg += f"📈 *Umumiy natija:* {percentage:.1f}%\n"
-    res_msg += f"🎯 *To'g'ri javoblar:* {correct_count}/{total_questions}\n"
-    res_msg += f"⚡️ *XP to'plandi:* +{xp_earned} XP\n"
-    
+
+    # Send breakdown (auto-split)
+    await send_result_messages(
+        message,
+        result_details,
+        header="📊 *Listening Natijasi:*"
+    )
+
+    summary = (
+        f"📈 *Natija:* {percentage:.1f}%\n"
+        f"🎯 *To'g'ri:* {correct_count}/{total_questions}\n"
+        f"⚡️ *XP:* +{xp_earned} XP"
+    )
+
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🔄 Qayta ishlash", callback_data=f"listening_retake:{question_id}"),
@@ -418,8 +347,7 @@ async def process_listening_answers(message: types.Message, state: FSMContext):
             InlineKeyboardButton(text="🏠 Asosiy Menyuga", callback_data="listening_back_main")
         ]
     ])
-    
-    await message.answer(res_msg, reply_markup=markup, parse_mode="Markdown")
+    await message.answer(summary, reply_markup=markup, parse_mode="Markdown")
 
 @router.callback_query(F.data.startswith("listening_retake:"))
 async def retake_listening_test(callback: types.CallbackQuery, state: FSMContext):
@@ -428,11 +356,9 @@ async def retake_listening_test(callback: types.CallbackQuery, state: FSMContext
         stmt = select(Question).where(Question.id == question_id)
         res = await session.execute(stmt)
         question = res.scalar_one_or_none()
-        
         if not question:
             await callback.answer("Savol topilmadi.", show_alert=True)
             return
-            
         await callback.message.delete()
         await start_listening_test(callback.message, question, question.part, state)
         await callback.answer()
@@ -450,11 +376,9 @@ async def next_listening_part(callback: types.CallbackQuery, state: FSMContext):
         )
         res = await session.execute(stmt)
         questions = res.scalars().all()
-        
         if not questions:
-            await callback.answer(f"Hozircha Part {next_part} uchun testlar mavjud emas.", show_alert=True)
+            await callback.answer(f"Part {next_part} uchun testlar mavjud emas.", show_alert=True)
             return
-            
         await callback.message.delete()
         await start_listening_test(callback.message, questions[0], next_part, state)
         await callback.answer()

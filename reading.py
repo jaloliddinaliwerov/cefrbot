@@ -6,6 +6,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
 from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement, Achievement
 from states import ReadingState
+from answer_utils import parse_answers_universal, check_answers, send_result_messages
 
 router = Router()
 
@@ -31,7 +32,7 @@ def get_parts_keyboard() -> InlineKeyboardMarkup:
 @router.message(F.text == "📖 Reading")
 async def reading_menu(message: types.Message):
     await message.answer(
-        "📖 **Reading bo'limi**\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
+        "📖 *Reading bo'limi*\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
         reply_markup=get_parts_keyboard(),
         parse_mode="Markdown"
     )
@@ -69,7 +70,7 @@ async def select_reading_part(callback: types.CallbackQuery, state: FSMContext):
         
         await callback.message.delete()
         await callback.message.answer(
-            f"📖 **Reading - Part {part}**\n\nIshlash uchun testni tanlang:",
+            f"📖 *Reading - Part {part}*\n\nIshlash uchun testni tanlang:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=markup),
             parse_mode="Markdown"
         )
@@ -79,7 +80,7 @@ async def select_reading_part(callback: types.CallbackQuery, state: FSMContext):
 async def back_to_reading_parts_cb(callback: types.CallbackQuery):
     await callback.message.delete()
     await callback.message.answer(
-        "📖 **Reading bo'limi**\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
+        "📖 *Reading bo'limi*\n\nIltimos, ishlashni xohlagan qismingizni tanlang:",
         reply_markup=get_parts_keyboard(),
         parse_mode="Markdown"
     )
@@ -104,80 +105,45 @@ async def start_reading_test_cb(callback: types.CallbackQuery, state: FSMContext
         await callback.answer()
 
 async def start_reading_test(message: types.Message, question: Question, part: int, state: FSMContext):
-    # Set FSM state
     await state.set_state(ReadingState.answering)
     await state.update_data(question_id=question.id, part=part)
 
-    # Check if there is a direct PDF file attached or linked
+    # Check for PDF (channel-linked or file_id)
     pdf_val = getattr(question, "pdf_file_id", None)
     if pdf_val:
-        if pdf_val.startswith("http") or "t.me" in pdf_val:
-            from common import parse_telegram_message_link
-            chat_id, msg_id = parse_telegram_message_link(pdf_val)
-            if chat_id and msg_id:
-                try:
-                    await message.bot.copy_message(
-                        chat_id=message.chat.id,
-                        from_chat_id=chat_id,
-                        message_id=msg_id
-                    )
-                except Exception as e:
-                    await message.answer(
-                        f"⚠️ PDF faylni yuborishda xatolik: {e}\n"
-                        "Bot kanalda admin ekanligini tekshiring."
-                    )
-                    await state.clear()
-                    return
-            else:
-                await message.answer("⚠️ PDF ssilkasi formati noto'g'ri. Admin panelda havolani tekshiring.")
-                await state.clear()
-                return
-        else:
-            # Direct file_id
-            try:
-                await message.answer_document(
-                    document=pdf_val,
-                    caption=f"📖 *Reading - Part {part}*\n📌 *{question.title}*",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                await message.answer(f"⚠️ PDF faylni yuborishda xatolik: {e}")
-                await state.clear()
-                return
+        sent_ok = await _send_pdf(message, pdf_val, state)
+        if not sent_ok:
+            return
 
         questions_list = question.questions_json or []
         total = len(questions_list)
-        
         q_text = (
             f"📖 *Reading - Part {part}*\n"
             f"📌 *{question.title}*\n\n"
         )
         if total > 0:
             q_text += f"📝 Jami *{total}* ta savol bor.\n\n"
-        q_text += (
-            "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
-            "Masalan:\n"
-            "`1-A, 2-C, 3-B` (harfli javoblar)\n"
-            "yoki\n"
-            "`1-Apple, 2-Orange, 3-Banana` (matnli javoblar)\n\n"
-            "Javobingizni quyida yozib yuboring:"
-        )
+        q_text += _answer_hint()
         await message.answer(q_text, parse_mode="Markdown")
         return
 
-    # No PDF — show text-based question
+    # Text-based question
     questions_list = question.questions_json or []
     if not questions_list:
         await message.answer("⚠️ Bu testda savollar topilmadi. Admin bilan bog'laning.")
         await state.clear()
         return
 
-    q_text = f"📖 *Reading - Part {part}*\n\n"
-    q_text += f"📌 *{question.title}*\n\n"
+    q_text = f"📖 *Reading - Part {part}*\n\n📌 *{question.title}*\n\n"
     if question.text:
-        q_text += f"{question.text}\n\n"
+        # Split long reading passages to avoid 4096 limit
+        if len(question.text) > 3000:
+            await message.answer(f"📖 *Reading - Part {part}*\n\n📌 *{question.title}*\n\n{question.text[:3000]}...", parse_mode="Markdown")
+            q_text = f"...{question.text[3000:]}\n\n"
+        else:
+            q_text += f"{question.text}\n\n"
+
     q_text += "📝 *Savollar:*\n"
-    
     has_options = any(len(q_item.get('options', [])) > 0 for q_item in questions_list)
     
     for idx, q_item in enumerate(questions_list, 1):
@@ -186,55 +152,61 @@ async def start_reading_test(message: types.Message, question: Question, part: i
             q_text += f"   {opt}\n"
             
     if has_options:
-        q_text += (
-            "\n✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
-            "Masalan: `1-A, 2-C, 3-B` (Harflar kattaligi muhim emas)"
-        )
+        q_text += "\n✍️ Javob formati: `1-A, 2-C, 3-B`"
     else:
-        q_text += (
-            "\n✍️ *Javoblaringizni har bir savol tartib raqami bilan yozib yuboring.*\n"
-            "Masalan:\n"
-            "`1-Apple`\n"
-            "`2-Orange`\n"
-            "`3-Banana`\n"
-            "(Harflar kattaligi va ortiqcha bo'shliqlar hisobga olinmaydi)"
-        )
-    await message.answer(q_text, parse_mode="Markdown")
+        q_text += "\n✍️ Javob formati: `1-Apple, 2-Orange, 3-Banana`"
 
-def parse_user_answers(text: str) -> dict:
-    """
-    Parses answer strings like:
-      '1-A, 2-B, 3-C'
-      '1. A\n2. B\n3. C'
-      '1 A 2 B 3 C'
-    Returns {1: 'A', 2: 'B', 3: 'C'}
-    """
-    answers = {}
-    text = text.strip()
-    
-    # Strategy: find all (number, answer) pairs
-    # Pattern: digit(s) followed by separator, then answer value until next digit
-    pattern = re.compile(
-        r'(?:^|(?<=[\n,;]))\s*(\d+)\s*[\-\.:]\s*([A-Za-z][^0-9\n,;]*?|[^\s\n,;]+)',
-        re.MULTILINE
+    # Send in chunks if too long
+    if len(q_text) > 4000:
+        parts_text = q_text[:4000]
+        await message.answer(parts_text, parse_mode="Markdown")
+        await message.answer(q_text[4000:] + "\n\n✍️ Javoblaringizni yozing:", parse_mode="Markdown")
+    else:
+        await message.answer(q_text, parse_mode="Markdown")
+
+async def _send_pdf(message: types.Message, pdf_val: str, state: FSMContext) -> bool:
+    """Send PDF from channel link or file_id. Returns True on success."""
+    if pdf_val.startswith("http") or "t.me" in pdf_val:
+        from common import parse_telegram_message_link
+        chat_id, msg_id = parse_telegram_message_link(pdf_val)
+        if chat_id and msg_id:
+            try:
+                await message.bot.copy_message(
+                    chat_id=message.chat.id,
+                    from_chat_id=chat_id,
+                    message_id=msg_id
+                )
+                return True
+            except Exception as e:
+                await message.answer(
+                    f"⚠️ PDF faylni yuborishda xatolik: {e}\n"
+                    "Bot kanalda admin ekanligini tekshiring."
+                )
+                await state.clear()
+                return False
+        else:
+            await message.answer("⚠️ PDF ssilkasi formati noto'g'ri. Admin panelda havolani tekshiring.")
+            await state.clear()
+            return False
+    else:
+        try:
+            await message.answer_document(document=pdf_val)
+            return True
+        except Exception as e:
+            await message.answer(f"⚠️ PDF faylni yuborishda xatolik: {e}")
+            await state.clear()
+            return False
+
+def _answer_hint() -> str:
+    return (
+        "✍️ *Javoblaringizni bitta xabar shaklida yuboring.*\n"
+        "Quyidagi formatlarning istalganida yozishingiz mumkin:\n\n"
+        "`1-A, 2-C, 3-B`\n"
+        "`1. Apple  2. Orange  3. Banana`\n"
+        "`1A 2B 3C`\n"
+        "`A B C D E` (tartib bo'yicha)\n\n"
+        "Javobingizni quyida yozib yuboring:"
     )
-    matches = pattern.findall(text)
-    
-    if matches:
-        for q_num_str, ans_val in matches:
-            q_num = int(q_num_str)
-            ans_clean = ans_val.strip().rstrip('.,;: ')
-            if ans_clean:
-                answers[q_num] = ans_clean
-        return answers
-    
-    # Fallback: simple split
-    simple_pattern = re.compile(r'(\d+)\s*[\-\.:]\s*(\S+)')
-    simple_matches = simple_pattern.findall(text)
-    for q_num_str, ans_val in simple_matches:
-        answers[int(q_num_str)] = ans_val.strip().rstrip('.,;: ')
-    
-    return answers
 
 @router.message(ReadingState.answering, F.text)
 async def process_reading_answers(message: types.Message, state: FSMContext):
@@ -243,13 +215,15 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
     part = state_data.get("part")
     is_daily = state_data.get("is_daily", False)
     
-    user_answers = parse_user_answers(message.text)
+    user_answers = parse_answers_universal(message.text)
     
     if not user_answers:
         await message.answer(
-            "⚠️ Javobingiz formati noto'g'ri. Iltimos quyidagi formatda yuboring:\n"
-            "Masalan: `1-A, 2-C, 3-B` yoki\n"
-            "`1-Apple, 2-Orange, 3-Banana`",
+            "⚠️ Javobingiz formatini aniqlab bo'lmadi.\n"
+            "Iltimos quyidagi formatlardan birida yuboring:\n"
+            "`1-A, 2-C, 3-B`\n"
+            "`1. Apple  2. Orange`\n"
+            "`A B C D` (tartib bo'yicha)",
             parse_mode="Markdown"
         )
         return
@@ -258,10 +232,8 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
     correct_count = 0
     total_questions = 0
     percentage = 0.0
-    result_details = []
 
     async with DBContext() as session:
-        # Retrieve the question
         stmt = select(Question).where(Question.id == question_id)
         res = await session.execute(stmt)
         question = res.scalar_one_or_none()
@@ -279,44 +251,14 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
             await state.clear()
             return
         
-        # Check Answers
-        wrong_answers = {}
+        # Check answers using shared utility
+        correct_count, result_details, wrong_answers = check_answers(user_answers, questions_list)
         
-        for idx, q_item in enumerate(questions_list, 1):
-            q_id_num = q_item.get("id", idx)
-            correct_ans = str(q_item.get("answer", "")).strip()
-            has_opts = len(q_item.get('options', [])) > 0
-            
-            user_ans = str(user_answers.get(q_id_num) or user_answers.get(idx) or "").strip()
-            
-            if has_opts:
-                # Extract just the letter from "A: Something" format
-                c_letter = correct_ans.split(":")[0].strip() if ":" in correct_ans else correct_ans
-                u_letter = user_ans.split(":")[0].strip() if ":" in user_ans else user_ans
-                is_correct = (u_letter.upper() == c_letter.upper())
-                show_correct = c_letter
-            else:
-                def clean_str(s):
-                    return re.sub(r'[^\w\s]', '', s.lower().strip())
-                is_correct = (clean_str(user_ans) == clean_str(correct_ans))
-                show_correct = correct_ans
-                
-            if is_correct:
-                correct_count += 1
-                result_details.append(f"✅ {q_id_num}-savol: To'g'ri")
-            else:
-                wrong_answers[str(q_id_num)] = user_ans
-                result_details.append(
-                    f"❌ {q_id_num}-savol: Noto'g'ri "
-                    f"(Siz: {user_ans or 'Javob berilmadi'}, To'g'ri: {show_correct})"
-                )
-
-        # Score calculations
         percentage = (correct_count / total_questions) * 100
         xp_earned = correct_count * 10
         if is_daily:
-            xp_earned += 20  # Bonus XP for Daily Challenge
-        
+            xp_earned += 20
+
         # Save progress
         progress = UserProgress(
             user_id=message.from_user.id,
@@ -327,7 +269,7 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
         )
         session.add(progress)
         
-        # Save to incorrect questions bank if wrong answers exist
+        # Wrong answers bank
         if wrong_answers:
             wrong_stmt = select(UserIncorrectQuestion).where(
                 UserIncorrectQuestion.user_id == message.from_user.id,
@@ -335,7 +277,6 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
             )
             wrong_res = await session.execute(wrong_stmt)
             incorrect_entry = wrong_res.scalar_one_or_none()
-            
             if not incorrect_entry:
                 incorrect_entry = UserIncorrectQuestion(
                     user_id=message.from_user.id,
@@ -346,7 +287,6 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
             else:
                 incorrect_entry.wrong_answers_json = wrong_answers
         else:
-            # Delete if previously in bank and now 100% correct
             del_stmt = select(UserIncorrectQuestion).where(
                 UserIncorrectQuestion.user_id == message.from_user.id,
                 UserIncorrectQuestion.question_id == question_id
@@ -356,7 +296,7 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
             if incorrect_entry:
                 await session.delete(incorrect_entry)
 
-        # Update User XP
+        # Update XP
         user_stmt = select(User).where(User.id == message.from_user.id)
         user_res = await session.execute(user_stmt)
         user = user_res.scalar_one_or_none()
@@ -365,7 +305,6 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
                 xp_earned *= 2
             user.xp += xp_earned
             
-            # Unlock achievements — First test
             ach_stmt = select(UserAchievement).where(
                 UserAchievement.user_id == user.id,
                 UserAchievement.achievement_id == "first_test"
@@ -375,9 +314,8 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
                 new_ach = UserAchievement(user_id=user.id, achievement_id="first_test")
                 session.add(new_ach)
                 user.xp += 50
-                await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 Birinchi Qadam (Birinchi testni topshirdingiz!) | +50 XP", parse_mode="Markdown")
+                await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 Birinchi Qadam | +50 XP", parse_mode="Markdown")
 
-            # Perfect score achievement
             if percentage == 100:
                 perf_stmt = select(UserAchievement).where(
                     UserAchievement.user_id == user.id,
@@ -388,22 +326,27 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
                     new_ach = UserAchievement(user_id=user.id, achievement_id="perfect_score")
                     session.add(new_ach)
                     user.xp += 150
-                    await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 A'lochi (Testdan 100% natija!) | +150 XP", parse_mode="Markdown")
+                    await message.answer("🎉 *Yangi Yutuq Ochildi!*\n🏆 A'lochi (100%) | +150 XP", parse_mode="Markdown")
 
         await session.commit()
-        
-    # Output results
+
     await state.clear()
 
-    res_msg = "📊 *Test Natijasi:*\n\n"
-    res_msg += "\n".join(result_details) + "\n\n"
+    # Send result breakdown (split if many questions)
+    await send_result_messages(
+        message,
+        result_details,
+        header=f"📊 *Reading Test Natijasi:*"
+    )
+
+    # Summary message
+    summary = ""
     if is_daily:
-        res_msg += "🌟 *Daily Challenge muvaffaqiyatli topshirildi! (+20 Bonus XP)*\n"
-    res_msg += f"📈 *Umumiy natija:* {percentage:.1f}%\n"
-    res_msg += f"🎯 *To'g'ri javoblar:* {correct_count}/{total_questions}\n"
-    res_msg += f"⚡️ *XP to'plandi:* +{xp_earned} XP\n"
-    
-    # Navigation buttons
+        summary += "🌟 *Daily Challenge bajarildi! (+20 Bonus XP)*\n"
+    summary += f"📈 *Natija:* {percentage:.1f}%\n"
+    summary += f"🎯 *To'g'ri:* {correct_count}/{total_questions}\n"
+    summary += f"⚡️ *XP:* +{xp_earned} XP"
+
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🔄 Qayta ishlash", callback_data=f"reading_retake:{question_id}"),
@@ -413,8 +356,7 @@ async def process_reading_answers(message: types.Message, state: FSMContext):
             InlineKeyboardButton(text="🏠 Asosiy Menyuga", callback_data="reading_back_main")
         ]
     ])
-    
-    await message.answer(res_msg, reply_markup=markup, parse_mode="Markdown")
+    await message.answer(summary, reply_markup=markup, parse_mode="Markdown")
 
 @router.callback_query(F.data.startswith("reading_retake:"))
 async def retake_reading_test(callback: types.CallbackQuery, state: FSMContext):
@@ -423,11 +365,9 @@ async def retake_reading_test(callback: types.CallbackQuery, state: FSMContext):
         stmt = select(Question).where(Question.id == question_id)
         res = await session.execute(stmt)
         question = res.scalar_one_or_none()
-        
         if not question:
             await callback.answer("Savol topilmadi.", show_alert=True)
             return
-            
         await callback.message.delete()
         await start_reading_test(callback.message, question, question.part, state)
         await callback.answer()
@@ -445,11 +385,9 @@ async def next_reading_part(callback: types.CallbackQuery, state: FSMContext):
         )
         res = await session.execute(stmt)
         questions = res.scalars().all()
-        
         if not questions:
-            await callback.answer(f"Hozircha Part {next_part} uchun testlar mavjud emas.", show_alert=True)
+            await callback.answer(f"Part {next_part} uchun testlar mavjud emas.", show_alert=True)
             return
-            
         await callback.message.delete()
         await start_reading_test(callback.message, questions[0], next_part, state)
         await callback.answer()

@@ -1,9 +1,12 @@
 import os
 import hashlib
+import asyncio
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
-from database import DBContext, MockPurchase, SpeakingSubmission, User, MockExam, SpeakingTask, BotSettings
-from sqlalchemy import select
+from aiogram.fsm.context import FSMContext
+from database import DBContext, MockPurchase, SpeakingSubmission, User, MockExam, SpeakingTask, BotSettings, Question, WritingSubmission
+from sqlalchemy import select, func
+from states import AdminState
 
 router = Router()
 
@@ -57,14 +60,20 @@ async def admin_cmd(message: types.Message):
     text = (
         "👑 **Admin Panelga Xush Kelibsiz!**\n\n"
         "Quyidagi tugmalar orqali bot ichida boshqarishingiz mumkin:\n\n"
-        "🎙️ **Speaking javoblari** — Baholanmagan speaking topshiriqlarini tekshirish.\n"
-        "💳 **Kutilayotgan to'lovlar** — Mock testlar uchun to'lov cheklarini tekshirish."
+        "🎤 **Speaking javoblari** — Baholanmagan speaking topshiriqlarini tekshirish.\n"
+        "💳 **Kutilayotgan to'lovlar** — Mock testlar uchun to'lov cheklarini tekshirish.\n"
+        "📊 **Statistika** — Bot foydalanuvchilar va testlar statistikasi.\n"
+        "📢 **Habar jo'natish** — Barcha foydalanuvchilarga xabar yuborish."
     )
     
     markup = types.InlineKeyboardMarkup(inline_keyboard=[
         [
-            types.InlineKeyboardButton(text="🎙️ Speaking javoblari", callback_data="admin_view_speakings"),
+            types.InlineKeyboardButton(text="🎤 Speaking javoblari", callback_data="admin_view_speakings"),
             types.InlineKeyboardButton(text="💳 Kutilayotgan to'lovlar", callback_data="admin_view_payments")
+        ],
+        [
+            types.InlineKeyboardButton(text="📊 Bot Statistikasi", callback_data="admin_view_stats"),
+            types.InlineKeyboardButton(text="📢 Habar Jo'natish", callback_data="admin_broadcast")
         ],
         [types.InlineKeyboardButton(text="⚙️ Web Admin Panel", web_app=types.WebAppInfo(url=admin_link))],
         [types.InlineKeyboardButton(text="🌐 Brauzerda ochish", url=admin_link)]
@@ -78,6 +87,98 @@ async def admin_cmd(message: types.Message):
         f"`{token}`\n\n"
         f"🖥️ **Backend API URL:**\n"
         f"`{backend_url}`",
+        parse_mode="Markdown"
+    )
+
+@router.callback_query(F.data == "admin_view_stats")
+async def admin_view_stats_handler(callback: types.CallbackQuery):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+
+    async with DBContext() as session:
+        user_count = await session.scalar(select(func.count(User.id))) or 0
+        from database import Question, UserProgress, MockExam, WritingSubmission
+        question_count = await session.scalar(select(func.count(Question.id))) or 0
+        mock_count = await session.scalar(select(func.count(MockExam.id))) or 0
+        progress_count = await session.scalar(select(func.count(UserProgress.id))) or 0
+        pending_payments = await session.scalar(
+            select(func.count(MockPurchase.id)).where(MockPurchase.status == "pending")
+        ) or 0
+        pending_speaking = await session.scalar(
+            select(func.count(SpeakingSubmission.id)).where(SpeakingSubmission.admin_graded == False)
+        ) or 0
+        # Top 5 users by XP
+        top_stmt = select(User.first_name, User.xp).order_by(User.xp.desc()).limit(5)
+        top_res = await session.execute(top_stmt)
+        top_users = top_res.all()
+
+    top_text = ""
+    for idx, (name, xp) in enumerate(top_users, 1):
+        top_text += f"  {idx}. {name or 'Foydalanuvchi'} — {xp} XP\n"
+
+    await callback.message.answer(
+        f"📊 *Bot Statistikasi:*\n\n"
+        f"👥 Jami foydalanuvchilar: *{user_count}* ta\n"
+        f"📚 Jami testlar (Reading/Listening): *{question_count}* ta\n"
+        f"🎓 Mock imtihonlar: *{mock_count}* ta\n"
+        f"📝 Bajarilgan testlar: *{progress_count}* ta\n\n"
+        f"⏳ Kutilayotgan to'lovlar: *{pending_payments}* ta\n"
+        f"🎙️ Baholanmagan Speaking: *{pending_speaking}* ta\n\n"
+        f"🏆 *Top 5 o'quvchilar (XP bo'yicha):*\n{top_text}",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "admin_broadcast")
+async def admin_broadcast_handler(callback: types.CallbackQuery, state: FSMContext):
+    user_id_str = str(callback.from_user.id)
+    admin_ids = os.getenv("ADMIN_IDS", "").split(",")
+    if user_id_str not in admin_ids:
+        await callback.answer("Siz admin emassiz!", show_alert=True)
+        return
+    await state.set_state(AdminState.waiting_broadcast)
+    await callback.message.answer(
+        "📢 *Barcha foydalanuvchilarga yuboriladigan xabarni yozing:*\n\n"
+        "_(Bekor qilish uchun /cancel yozing)_",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@router.message(AdminState.waiting_broadcast, F.text)
+async def process_broadcast(message: types.Message, state: FSMContext, bot: Bot):
+    if message.text.strip() == "/cancel":
+        await state.clear()
+        await message.answer("❌ Habar jo'natish bekor qilindi.")
+        return
+    
+    await state.clear()
+    await message.answer("📤 Habar jo'natilmoqda, iltimos kuting...")
+    
+    async with DBContext() as session:
+        result = await session.execute(select(User.id))
+        user_ids = result.scalars().all()
+    
+    sent = 0
+    failed = 0
+    for uid in user_ids:
+        try:
+            await bot.send_message(chat_id=uid, text=message.text)
+            sent += 1
+            # Small delay to avoid flood limits
+            if sent % 25 == 0:
+                await asyncio.sleep(1)
+        except Exception:
+            failed += 1
+            continue
+    
+    await message.answer(
+        f"✅ *Habar yuborish yakunlandi!*\n\n"
+        f"📨 Muvaffaqiyatli: *{sent}* ta\n"
+        f"❌ Yuborilmadi (block): *{failed}* ta\n"
+        f"👥 Jami foydalanuvchilar: *{len(user_ids)}* ta",
         parse_mode="Markdown"
     )
 

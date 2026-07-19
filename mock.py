@@ -8,6 +8,7 @@ from sqlalchemy import select
 from database import DBContext, MockExam, MockPurchase, Question, WritingTask, SpeakingTask, User, UserAchievement, UserProgress, BotSettings
 from states import MockState
 from ai_service import evaluate_writing, evaluate_speaking
+from answer_utils import parse_answers_universal, check_answers, send_result_messages
 
 router = Router()
 
@@ -495,38 +496,10 @@ async def send_next_mock_reading(message: types.Message, state: FSMContext):
     
     await message.answer(q_text, parse_mode="Markdown")
 
-# Regex to parse answers
+# Regex to parse answers — now uses universal parser from answer_utils
 import re
 def parse_answers(text: str) -> dict:
-    """
-    Parse answer strings like '1-A, 2-C, 3-B' or '1. A\n2. B\n3. C'
-    Returns {1: 'A', 2: 'C', 3: 'B'}
-    """
-    answers = {}
-    text = text.strip()
-    
-    # Primary pattern: match `N-answer` or `N. answer` or `N: answer`
-    pattern = re.compile(
-        r'(?:^|(?<=[\n,;]))\s*(\d+)\s*[\-\.:]\s*([A-Za-z][^0-9\n,;]*?|[^\s\n,;]+)',
-        re.MULTILINE
-    )
-    matches = pattern.findall(text)
-    
-    if matches:
-        for q_num_str, ans_val in matches:
-            q_num = int(q_num_str)
-            ans_clean = ans_val.strip().rstrip('.,;: ')
-            if ans_clean:
-                answers[q_num] = ans_clean
-        return answers
-    
-    # Fallback: simple N-X pattern anywhere in text
-    simple_pattern = re.compile(r'(\d+)\s*[\-\.:]\s*(\S+)')
-    simple_matches = simple_pattern.findall(text)
-    for q_num_str, ans_val in simple_matches:
-        answers[int(q_num_str)] = ans_val.strip().rstrip('.,;: ')
-    
-    return answers
+    return parse_answers_universal(text)
 
 @router.message(MockState.answering_pdf, F.text)
 async def process_pdf_mock_answers(message: types.Message, state: FSMContext):
@@ -623,11 +596,12 @@ async def process_pdf_mock_answers(message: types.Message, state: FSMContext):
         f"⚡️ +300 XP hisobingizga qo'shildi!"
     )
     
-    if len(result_details) > 0:
-        breakdown_text = "\n\n".join(result_details[:30])
-        if len(result_details) > 30:
-            breakdown_text += "\n\n...va qolgan savollar."
-        await message.answer(f"📊 **Batafsil natijalar:**\n\n{breakdown_text}")
+    # Send all result details (auto-split for Telegram 4096 limit)
+    await send_result_messages(
+        message,
+        result_details,
+        header="📊 **Batafsil natijalar:**"
+    )
 
     markup = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏠 Asosiy Menyu", callback_data="mock_back_main")]
