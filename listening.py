@@ -4,7 +4,7 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
-from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement
+from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement, BotSettings
 from states import ListeningState
 from answer_utils import parse_answers_universal, check_answers, send_result_messages
 
@@ -163,13 +163,48 @@ def _answer_hint() -> str:
         "Javobingizni quyida yozib yuboring:"
     )
 
+async def get_channel_link_for_listening(question: Question, part: int) -> str | None:
+    """Get channel post link or configured channel link for this listening part."""
+    pdf_val = getattr(question, "pdf_file_id", None)
+    if pdf_val and (pdf_val.startswith("http") or "t.me" in pdf_val):
+        link = pdf_val.strip()
+        if not link.startswith("http"):
+            link = f"https://{link}"
+        return link
+
+    async with DBContext() as session:
+        stmt = select(BotSettings.value).where(BotSettings.key == f"chan_list_{part}")
+        res = await session.execute(stmt)
+        val = res.scalar_one_or_none()
+        if val:
+            val = val.strip()
+            if val.startswith("@"):
+                return f"https://t.me/{val[1:]}"
+            elif val.startswith("http"):
+                return val
+            elif "t.me" in val:
+                return f"https://{val}"
+            elif val:
+                return f"https://t.me/{val}"
+
+    return None
+
 async def start_listening_test(message: types.Message, question: Question, part: int, state: FSMContext):
     await state.set_state(ListeningState.answering)
     await state.update_data(question_id=question.id, part=part)
 
+    # Get channel link for listening material if configured
+    chan_link = await get_channel_link_for_listening(question, part)
+
     # Send audio first (if any), then PDF or text questions
     if question.audio_url:
         await _send_audio(message, question.audio_url, part)
+
+    markup = None
+    if chan_link:
+        markup = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Kanaldan topshiriqni ko'rish", url=chan_link)]
+        ])
 
     # Check for PDF
     pdf_val = getattr(question, "pdf_file_id", None)
@@ -184,10 +219,13 @@ async def start_listening_test(message: types.Message, question: Question, part:
             f"🎧 *Listening - Part {part}*\n"
             f"📌 *{question.title}*\n\n"
         )
+        if chan_link:
+            q_text += f"📢 *Kanal havolasi:* [Savol va audioni kanalda ko'rish]({chan_link})\n\n"
+
         if total > 0:
             q_text += f"📝 Jami *{total}* ta savol bor.\n\n"
         q_text += _answer_hint()
-        await message.answer(q_text, parse_mode="Markdown")
+        await message.answer(q_text, reply_markup=markup, parse_mode="Markdown")
         return
 
     # Text-based questions (no PDF)
@@ -197,10 +235,13 @@ async def start_listening_test(message: types.Message, question: Question, part:
         await state.clear()
         return
 
-    if not question.audio_url:
+    if not question.audio_url and not chan_link:
         await message.answer("⚠️ Audio fayl topilmadi, savollarga matn asosida javob bering.")
 
     q_text = f"🎧 *Listening - Part {part}*\n📌 *{question.title}*\n\n"
+    if chan_link:
+        q_text += f"📢 *Kanal havolasi:* [Savol va audioni kanalda ko'rish]({chan_link})\n\n"
+
     q_text += "📝 *Savollar:*\n"
     has_options = any(len(q_item.get('options', [])) > 0 for q_item in questions_list)
     
@@ -216,9 +257,9 @@ async def start_listening_test(message: types.Message, question: Question, part:
 
     if len(q_text) > 4000:
         await message.answer(q_text[:4000], parse_mode="Markdown")
-        await message.answer(q_text[4000:] + "\n\n✍️ Javoblarni yozing:", parse_mode="Markdown")
+        await message.answer(q_text[4000:] + "\n\n✍️ Javoblarni yozing:", reply_markup=markup, parse_mode="Markdown")
     else:
-        await message.answer(q_text, parse_mode="Markdown")
+        await message.answer(q_text, reply_markup=markup, parse_mode="Markdown")
 
 @router.message(ListeningState.answering, F.text)
 async def process_listening_answers(message: types.Message, state: FSMContext):

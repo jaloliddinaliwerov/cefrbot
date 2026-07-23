@@ -4,7 +4,7 @@ from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy import select
-from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement, Achievement
+from database import DBContext, Question, UserProgress, UserIncorrectQuestion, User, UserAchievement, Achievement, BotSettings
 from states import ReadingState
 from answer_utils import parse_answers_universal, check_answers, send_result_messages
 
@@ -121,6 +121,7 @@ async def start_reading_test(message: types.Message, question: Question, part: i
             f"📖 *Reading - Part {part}*\n"
             f"📌 *{question.title}*\n\n"
         )
+
         if total > 0:
             q_text += f"📝 Jami *{total}* ta savol bor.\n\n"
         q_text += _answer_hint()
@@ -135,6 +136,7 @@ async def start_reading_test(message: types.Message, question: Question, part: i
         return
 
     q_text = f"📖 *Reading - Part {part}*\n\n📌 *{question.title}*\n\n"
+
     if question.text:
         # Split long reading passages to avoid 4096 limit
         if len(question.text) > 3000:
@@ -207,6 +209,8 @@ def _answer_hint() -> str:
         "`A B C D E` (tartib bo'yicha)\n\n"
         "Javobingizni quyida yozib yuboring:"
     )
+
+
 
 @router.message(ReadingState.answering, F.text)
 async def process_reading_answers(message: types.Message, state: FSMContext):
