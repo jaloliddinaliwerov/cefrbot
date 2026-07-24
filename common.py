@@ -4,7 +4,8 @@ from aiogram import Router, F, types, Bot
 from aiogram.filters import CommandStart, Command
 from aiogram.types import (
     ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardMarkup, InlineKeyboardButton
+    InlineKeyboardMarkup, InlineKeyboardButton,
+    WebAppInfo
 )
 from sqlalchemy import select
 from database import DBContext, User
@@ -96,6 +97,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="📖 Reading"), KeyboardButton(text="🎧 Listening")],
         [KeyboardButton(text="✍️ Writing"), KeyboardButton(text="🗣️ Speaking")],
+        [KeyboardButton(text="🤖 AI Speaking (Sesame)", web_app=WebAppInfo(url="https://app.sesame.com/"))],
         [KeyboardButton(text="👤 Profil & Natijalar"), KeyboardButton(text="🏆 Leaderboard")],
         [KeyboardButton(text="🔥 Daily Challenge"), KeyboardButton(text="🎓 Mock Exam")]
     ]

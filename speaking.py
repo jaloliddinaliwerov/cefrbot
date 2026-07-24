@@ -2,7 +2,7 @@ import os
 import datetime
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 from sqlalchemy import select
 from database import DBContext, SpeakingTask, SpeakingSubmission, User, UserAchievement
 from states import SpeakingState
@@ -11,6 +11,7 @@ router = Router()
 
 def get_speaking_parts_keyboard() -> InlineKeyboardMarkup:
     keyboard = [
+        [InlineKeyboardButton(text="🤖 AI Speaking (Sesame)", web_app=WebAppInfo(url="https://app.sesame.com/"))],
         [InlineKeyboardButton(text="Part 1: Interview", callback_data="speaking_part:1")],
         [InlineKeyboardButton(text="Part 2: Cue Card", callback_data="speaking_part:2")],
         [InlineKeyboardButton(text="Part 3: Discussion", callback_data="speaking_part:3")],
